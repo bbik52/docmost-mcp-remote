@@ -55,6 +55,17 @@ class Settings(BaseSettings):
         default=frozenset(),
         description="Comma-separated emails allowed to sign in; empty allows every Docmost user.",
     )
+    allowed_spaces: Annotated[frozenset[str], NoDecode] = Field(
+        default=frozenset(),
+        description="Comma-separated space slugs or ids members may use through this server; "
+        "empty allows every space the member can see in Docmost.",
+    )
+    max_page_chars: int = Field(
+        default=60_000,
+        ge=1_000,
+        le=1_000_000,
+        description="Longest page body returned to a client; longer bodies are truncated.",
+    )
     relogin_mode: Literal["ask", "stored_password"] = Field(
         default="ask",
         description="On an expired Docmost session: ask the member to sign in again, or sign "
@@ -94,6 +105,13 @@ class Settings(BaseSettings):
         scheme = value.get_secret_value().split("://", 1)[0]
         if scheme not in ("postgres", "postgresql", "postgresql+asyncpg"):
             raise ValueError("DATABASE_URL must be a postgresql:// URL")
+        return value
+
+    @field_validator("allowed_spaces", mode="before")
+    @classmethod
+    def _split_spaces(cls, value: object) -> object:
+        if isinstance(value, str):
+            return frozenset(part.strip() for part in value.split(",") if part.strip())
         return value
 
     @field_validator("allowed_emails", mode="before")
