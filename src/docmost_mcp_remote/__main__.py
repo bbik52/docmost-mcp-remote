@@ -1,4 +1,4 @@
-"""Command line entry point: ``docmost-mcp-remote``."""
+"""Command line entry point: ``docmost-mcp-remote`` serves, ``... admin`` manages."""
 
 from __future__ import annotations
 
@@ -16,6 +16,13 @@ logger = logging.getLogger("docmost_mcp_remote")
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["admin"]:
+        from docmost_mcp_remote import admin
+
+        raise SystemExit(admin.main(sys.argv[2:]))
+    if sys.argv[1:2] == ["--version"]:
+        print(__version__)
+        return
     try:
         settings = Settings()
     except ValidationError as exc:

@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     LargeBinary,
@@ -185,3 +187,23 @@ snapshots = Table(
 
 Index("ix_snapshots_page_id_created_at", snapshots.c.page_id, snapshots.c.created_at)
 Index("ix_snapshots_created_at", snapshots.c.created_at)
+
+#: One row per tool call: who, which tool, which page, the outcome. Never content or arguments.
+audit_log = Table(
+    "audit_log",
+    metadata,
+    Column("id", BigInteger, Identity(), primary_key=True),
+    _now(),
+    #: No foreign keys: entries outlive members and grants.
+    Column("member_id", UUID(as_uuid=True)),
+    Column("grant_id", UUID(as_uuid=True)),
+    Column("tool", String(64), nullable=False),
+    Column("page_id", String(64)),
+    Column("space_id", String(64)),
+    #: ok, error or rate_limited.
+    Column("outcome", String(16), nullable=False),
+    Column("duration_ms", Integer, nullable=False),
+)
+
+Index("ix_audit_log_created_at", audit_log.c.created_at)
+Index("ix_audit_log_member_id_created_at", audit_log.c.member_id, audit_log.c.created_at)

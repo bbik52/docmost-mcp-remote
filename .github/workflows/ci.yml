@@ -135,6 +135,8 @@ jobs:
           curl -fsS http://127.0.0.1:8000/healthz
           curl -fsS -o /dev/null http://127.0.0.1:8000/login
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp)" = 401
+          curl -fsS http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp
+          docker compose exec -T server docmost-mcp-remote admin members
       - name: Logs
         if: always()
         run: docker compose logs

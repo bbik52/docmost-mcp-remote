@@ -19,29 +19,34 @@ Open-source MCP server for the internet, behind a domain with authorization. Any
 | Transport | Behind reverse proxy, https public URL mandatory; http Docmost URL only with explicit flag |
 
 ## Findings from the audit of the original, and how this design answers them
-| # | Finding | Answer |
-|---|---|---|
-| 1 | HTTP mode without auth | Auth is mandatory; no unauthenticated mode exists |
-| 2 | Prompt injection | Scopes, untrusted-data wrapping, Trash instead of delete |
-| 3 | Irreversible overwrite | Snapshot before replace |
-| 4 | Password in client config | Client config holds no Docmost password; login happens in the browser |
-| 5 | No URL scheme check | https required, http only via explicit flag with a warning |
-| 6 | Cookie login breaks body update | Server owns the Docmost token handling; covered by integration tests |
-| 7 | Temp page left in trash | Find a way without temp pages, or clean up and hide them; to verify |
-| 8 | Heavy overview calls | Page limits and request budget per call |
-| 9 | No SECURITY.md | Add one |
-| 10 | WebSocket without size limit | Set a limit |
+Status as of phase 7; the threats are reviewed in [security-model.md](security-model.md).
+
+| # | Finding | Answer | Status |
+|---|---|---|---|
+| 1 | HTTP mode without auth | Auth is mandatory; no unauthenticated mode exists | Done: `oauth.py`, `tests/test_server.py` |
+| 2 | Prompt injection | Scopes, untrusted-data wrapping, Trash instead of delete | Done: `tools/untrusted.py`, `tools/write.py`; residual risk in security-model.md |
+| 3 | Irreversible overwrite | Snapshot before replace | Done: snapshot before every body write, `tests/test_write_tools.py` |
+| 4 | Password in client config | Client config holds no Docmost password; login happens in the browser | Done: `web/routes.py`, OAuth consent |
+| 5 | No URL scheme check | https required, http only via explicit flag with a warning | Done: `config.py`, `tests/test_config.py` |
+| 6 | Cookie login breaks body update | Server owns the Docmost token handling; covered by integration tests | Done: bearer header only, `tests/integration/` |
+| 7 | Temp page left in trash | Find a way without temp pages, or clean up and hide them | Not applicable: no temp pages (`pages/update` with Markdown) |
+| 8 | Heavy overview calls | Page limits and request budget per call | Done: list limits, `MAX_PAGE_CHARS`, `TOOL_CALLS_PER_MINUTE` |
+| 9 | No SECURITY.md | Add one | Done: `SECURITY.md` |
+| 10 | WebSocket without size limit | Set a limit | Not applicable: no WebSocket client; HTTP responses are size-limited |
 
 ## Extra risks from my own review (not in the pasted audit)
-- OAuth: exact redirect URI match, PKCE required, resource/audience binding so a token for this server is useless elsewhere, short access tokens, refresh token rotation, abuse limits on dynamic client registration.
-- Login page is a password endpoint on the internet: CSRF protection, rate limiting per IP and per email, lockout, generic error messages, so the server cannot be used to brute-force Docmost passwords.
-- Encryption of stored Docmost tokens: key comes from a secret (not in git), supports rotation; a database leak alone must not expose sessions.
-- Logs never contain passwords, tokens, page content or tool arguments.
-- Response size limits and per-Member rate limits to keep a runaway agent from hammering Docmost.
-- Container: non-root, read-only filesystem where possible, pinned dependencies, image signed and built in CI, Dependabot or equivalent, `pip-audit` in CI.
-- Revocation: a Member can list and revoke Grants and tokens; an Admin can revoke any.
-- Audit log of tool calls (who, what, which page; no content) in Postgres.
-- Licensing: clean implementation, nothing copied from docmost-mcp-oss (MIT) or from Docmost (AGPL-3.0). If anything is copied later, add a `NOTICE` with the original MIT notice.
+| Risk | Status |
+|---|---|
+| OAuth: exact redirect URI match, PKCE required, resource/audience binding, short access tokens, refresh token rotation, abuse limits on dynamic client registration | Done: `oauth.py`, `tests/test_oauth.py` |
+| Login page as a password endpoint: CSRF, rate limits per IP and per email, generic errors | Done: `web/routes.py`, `tests/test_web.py`. A per-email limit acts as the lockout |
+| Encryption of stored Docmost tokens with a key outside git, with rotation | Done: `crypto.py`, `admin rotate-key` |
+| Logs without passwords, tokens, page content or tool arguments | Done: `tests/test_guard.py` |
+| Response size limits and per-Member rate limits | Done: `docmost/ce.py`, `guard.py` |
+| Container: non-root, read-only filesystem, pinned dependencies, signed image built in CI, Dependabot, `pip-audit` | Done except the signed image, which is part of the release workflow (phase 8) |
+| Revocation by Members and by the Admin | Done: account page, `admin revoke-grant`, `revoke-member`, `disable-member` |
+| Audit log of tool calls without content | Done: `guard.py`, `audit_log` table, `admin audit` |
+| Licensing: clean implementation, nothing copied | Done: no copied code; no `NOTICE` needed |
+| Snapshots visible to the Admin | Deferred: the Admin has the database and the key; there is no admin command for snapshots in v1 |
 
 ## Open questions
 1. ~~Snapshot storage and retention.~~ Resolved, see "Snapshots" below.
