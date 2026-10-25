@@ -6,8 +6,8 @@ put it behind your domain, and let AI clients such as Claude, Claude Code or
 Cursor read and edit the wiki on behalf of each member, with that member's own
 Docmost rights.
 
-> **Status: pre-alpha.** Members can sign in, create personal tokens and read
-> their Docmost through the tools below. Writing and OAuth are next; see the
+> **Status: pre-alpha.** Members can connect OAuth clients or personal tokens
+> and read their Docmost through the tools below. Writing is next; see the
 > [roadmap](docs/ROADMAP.md).
 
 ## Tools
@@ -53,6 +53,15 @@ store passwords unless `RELOGIN_MODE=stored_password`. Personal tokens are
 stored as hashes and shown once. The sign-in page has CSRF protection and
 per-IP and per-email rate limits.
 
+The server is its own OAuth 2.1 authorization server, following the MCP
+authorization spec: dynamic client registration (limited per IP, redirect
+URIs must be https, loopback http or a native app scheme), authorization
+code with PKCE (S256 only), exact redirect URI match, tokens bound to this
+server's `/mcp` resource, one-hour access tokens and 30-day refresh tokens
+that rotate on every use. A reused refresh token or a replayed code revokes
+the whole grant. OAuth grants and personal tokens are listed and revoked on
+the same account page.
+
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write` and `delete` only to clients you trust. See
@@ -73,19 +82,30 @@ an https URL; plain http is only accepted for `localhost`.
 
 ### Connecting a client
 
+**With OAuth** (Claude.ai and Claude Desktop connectors, Claude Code, Cursor,
+VS Code and other clients that support MCP authorization): add a remote MCP
+server with the URL `PUBLIC_URL/mcp`, for example
+`https://mcp.example.com/mcp`. The client opens a browser window; sign in with
+your Docmost email and password and choose what the client may do. `read` is
+always granted; tick `write` or `delete` only for clients you trust.
+
+```sh
+claude mcp add --transport http docmost https://mcp.example.com/mcp
+```
+
+**With a personal token** (scripts and clients without OAuth):
+
 1. Open `PUBLIC_URL/login` and sign in with your Docmost email and password.
-2. On the account page, create a personal token. New tokens can read; tick
-   `write` or `delete` only for clients you trust.
+2. On the account page, create a personal token with the scopes you need.
 3. Configure the client with the MCP endpoint `PUBLIC_URL/mcp` and the header
-   `Authorization: Bearer <token>`. For Claude Code:
+   `Authorization: Bearer <token>`:
 
    ```sh
    claude mcp add --transport http docmost https://mcp.example.com/mcp \
      --header "Authorization: Bearer dmr_..."
    ```
 
-Tokens can be revoked on the same page. OAuth sign-in for clients such as
-Claude.ai connectors comes in a later release.
+Connected apps and tokens can be revoked on the account page.
 
 ### Configuration
 

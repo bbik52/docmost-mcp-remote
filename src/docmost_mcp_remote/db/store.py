@@ -55,6 +55,12 @@ class TokenOwner:
     grant_id: uuid.UUID
     scopes: frozenset[str]
     expires_at: datetime | None
+    #: ``personal`` or ``access`` (OAuth).
+    kind: str
+    #: The resource an OAuth access token is bound to.
+    resource: str | None
+    #: The OAuth client of the grant; None for personal tokens.
+    client_id: str | None
 
 
 def _scopes(text: str) -> frozenset[str]:
@@ -220,7 +226,11 @@ class Store:
                 grants.c.id.label("grant_id"),
                 grants.c.scopes,
                 grants.c.last_used_at,
+                grants.c.client_id,
+                tokens.c.kind,
                 tokens.c.expires_at,
+                tokens.c.resource,
+                tokens.c.scopes.label("token_scopes"),
             )
             .select_from(
                 tokens.join(grants, tokens.c.grant_id == grants.c.id).join(
@@ -230,6 +240,7 @@ class Store:
             .where(
                 and_(
                     tokens.c.token_hash == hash_token(token),
+                    tokens.c.kind.in_(("personal", "access")),
                     tokens.c.revoked_at.is_(None),
                     grants.c.revoked_at.is_(None),
                     members.c.disabled_at.is_(None),
@@ -248,9 +259,15 @@ class Store:
                 await connection.execute(
                     update(grants).where(grants.c.id == row.grant_id).values(last_used_at=current)
                 )
+        scopes = _scopes(row.scopes)
+        if row.token_scopes is not None:
+            scopes &= _scopes(row.token_scopes)
         return TokenOwner(
             member_id=row.member_id,
             grant_id=row.grant_id,
-            scopes=_scopes(row.scopes),
+            scopes=scopes,
             expires_at=row.expires_at,
+            kind=row.kind,
+            resource=row.resource,
+            client_id=row.client_id,
         )

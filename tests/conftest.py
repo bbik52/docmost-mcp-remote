@@ -81,7 +81,10 @@ async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
     engine = create_engine(migrated_database)
     async with engine.begin() as connection:
         await connection.execute(
-            text("TRUNCATE members, docmost_sessions, grants, tokens RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE members, docmost_sessions, grants, tokens, oauth_clients, "
+                "oauth_requests, oauth_codes RESTART IDENTITY CASCADE"
+            )
         )
     try:
         yield engine

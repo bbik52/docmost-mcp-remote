@@ -32,7 +32,8 @@ class RunningServer:
     def __init__(self, docmost: DocmostClient | None = None, **settings: object) -> None:
         port = _free_port()
         self.url = f"http://127.0.0.1:{port}"
-        config = make_settings(public_url=f"http://localhost:{port}", **settings)
+        self.public_url = f"http://localhost:{port}"
+        config = make_settings(public_url=self.public_url, **settings)
         app = create_app(config, docmost)
         self.server = uvicorn.Server(
             uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
