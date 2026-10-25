@@ -7,6 +7,17 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-25
+
+### Fixed
+
+- Sign-in failed with an internal error when Docmost did not report its
+  version. Docmost's version endpoint answers with an empty body when its own
+  request to the GitHub API fails, for example when rate limited; the server
+  now logs a warning and treats the version as unknown.
+- The release workflow could not publish to the MCP Registry because an
+  action reference did not resolve; 1.0.0 is therefore not in the registry.
+
 ## [1.0.0] - 2026-10-25
 
 First release.
