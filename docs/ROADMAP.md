@@ -1,9 +1,11 @@
 # Roadmap to v1.0.0
 
 This is the plan from an empty repository to the v1.0.0 release. It follows
-[DESIGN.md](DESIGN.md) and the ADRs in [adr/](adr/). Each phase ends with a
-pull request to `master` that meets the phase's done criteria. A phase is only
-started after the previous one is merged.
+[DESIGN.md](DESIGN.md) and the ADRs in [adr/](adr/). The repository uses git
+flow: each phase is built on a `feature/*` branch and ends with a pull request
+to `develop` that meets the phase's done criteria. A phase is only started
+after the previous one is merged. Releases are merged from `develop` to
+`master` through a `release/*` branch and tagged on `master`.
 
 Versions: phases 1–3 are unreleased (`0.0.x`). The first public pre-release is
 `0.1.0` after phase 4. `1.0.0` is cut at the end of phase 8.

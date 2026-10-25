@@ -33,6 +33,10 @@ uv run pytest
 
 ## Pull requests
 
-- One topic per pull request, targeting `master`.
+- The repository uses git flow. Branch from `develop` as `feature/<topic>`
+  (or `bugfix/<topic>`) and open the pull request against `develop`.
+  `master` only receives `release/*` and `hotfix/*` merges and holds tagged
+  releases.
+- One topic per pull request.
 - Describe what changed and why; link the roadmap phase or issue.
 - CI must be green.
