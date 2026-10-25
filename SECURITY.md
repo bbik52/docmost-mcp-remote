@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-Until 1.0.0 only the latest release and `master` receive security fixes.
-After 1.0.0 the latest minor release is supported.
+Security fixes are released as a new patch version of the latest minor
+release. Older releases do not receive fixes, so upgrade to the newest
+release to get them.
 
 ## Reporting a vulnerability
 

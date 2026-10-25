@@ -22,10 +22,9 @@ Release artifacts are not signed yet (ADR 0006).
   `pypi`.
 - **GitHub environment**: Settings, Environments, `pypi`. Limit it to tags
   `v*` and, if you like, require your approval before each PyPI upload.
-- **Image visibility**: a new ghcr.io package is private. After the first
-  release pushed the image, open the package settings and make it public,
-  then re-run the failed `mcp-registry` job: the registry checks the image
-  label and needs to read the image.
+- **Image visibility**: the package `ghcr.io/bbik52/docmost-mcp-remote`
+  is public, like the repository. It must stay public: the registry reads
+  the image to check its label.
 - **Repository**: description and topics `mcp`, `mcp-server`, `docmost`,
   `model-context-protocol`, `oauth`, `wiki`, `self-hosted`; branch protection
   as described in DESIGN.md, "Contributions and project security".
@@ -56,6 +55,10 @@ Release artifacts are not signed yet (ADR 0006).
 8. Watch the Release workflow. It refuses a tag that does not match the
    project version, is not on `master` or has no changelog entry.
 9. Merge `master` back into `develop`.
+
+`release.yml` only runs on tags, so a mistake in it shows up at release
+time. When changing it, check that every action reference exists (a pinned
+commit or an existing tag).
 
 A failed job can be re-run from the Actions page; PyPI, ghcr.io and the
 registry do not accept the same version twice with different content, so a
