@@ -6,7 +6,8 @@ Open-source MCP server for the internet, behind a domain with authorization. Any
 ## Decisions so far
 | Topic | Decision |
 |---|---|
-| Path | New repository, written from scratch; docmost-mcp-oss is a reference only; MIT project license (ADR 0001) |
+| Path | New repository, written from scratch; docmost-mcp-oss is a reference only (ADR 0001) |
+| License | Apache 2.0, contributions under the same license, no CLA; DCO and release signing deferred (ADR 0006) |
 | Tenancy | 1 server = 1 Docmost = many Members (ADR 0002) |
 | Docmost identity | Each Member's own account; no password stored by default |
 | Client auth | OAuth 2.1 + personal bearer tokens (ADR 0003) |
@@ -42,11 +43,40 @@ Status as of phase 7; the threats are reviewed in [security-model.md](security-m
 | Encryption of stored Docmost tokens with a key outside git, with rotation | Done: `crypto.py`, `admin rotate-key` |
 | Logs without passwords, tokens, page content or tool arguments | Done: `tests/test_guard.py` |
 | Response size limits and per-Member rate limits | Done: `docmost/ce.py`, `guard.py` |
-| Container: non-root, read-only filesystem, pinned dependencies, signed image built in CI, Dependabot, `pip-audit` | Done except the signed image, which is part of the release workflow (phase 8) |
+| Container: non-root, read-only filesystem, pinned dependencies, signed image built in CI, Dependabot, `pip-audit` | Done except the signed image: the image is built in CI (phase 8), signing is deferred (ADR 0006) |
 | Revocation by Members and by the Admin | Done: account page, `admin revoke-grant`, `revoke-member`, `disable-member` |
 | Audit log of tool calls without content | Done: `guard.py`, `audit_log` table, `admin audit` |
-| Licensing: clean implementation, nothing copied | Done: no copied code; no `NOTICE` needed |
+| Licensing: clean implementation, nothing copied | Done: no copied code; `NOTICE` holds only the project's own notice |
 | Snapshots visible to the Admin | Deferred: the Admin has the database and the key; there is no admin command for snapshots in v1 |
+
+## Contributions and project security
+The license is Apache 2.0 (ADR 0006). As the project gains users and contributors:
+
+- **Contributing.** `CONTRIBUTING.md` explains the build, the tests (unit,
+  Postgres and real Docmost), git flow and how to open a pull request.
+  Contributions are accepted under Apache 2.0 section 5; there is no CLA.
+  A DCO (`Signed-off-by`) check is deferred and can be added later.
+- **Vulnerability reports.** `SECURITY.md` points to private GitHub security
+  advisories; [security-model.md](security-model.md) holds the threat model.
+- **Review.** Every change goes through a pull request with green CI. Changes
+  to authentication, OAuth, tokens, cryptography, the consent and sign-in
+  pages or the write path (`oauth.py`, `auth.py`, `crypto.py`, `web/`,
+  `tools/write.py`, `db/`) need a review by a second maintainer once there is
+  one.
+- **Branch protection.** `master` and `develop` accept changes only through
+  pull requests with the CI checks passing; nobody pushes directly. Release
+  tags are created from `master` only.
+- **Publishing rights.** PyPI uses trusted publishing from the release
+  workflow, so no long-lived token exists; ghcr.io is written only by that
+  workflow. Few people hold admin rights on the repository.
+- **Supply chain.** Locked dependencies, Dependabot, `pip-audit` in CI.
+  Signed release artifacts are deferred (ADR 0006).
+- **Community files.** A code of conduct and issue and pull request templates
+  are added when outside contributions start.
+- **The name.** The license gives no rights to the name `docmost-mcp-remote`
+  (Apache 2.0 section 6). Forks are welcome but should use another name so
+  users can tell them apart; the README says so. "Docmost" is a name of the
+  Docmost project; this project only describes compatibility with it.
 
 ## Open questions
 1. ~~Snapshot storage and retention.~~ Resolved, see "Snapshots" below.

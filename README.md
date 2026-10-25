@@ -195,6 +195,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE). This project is an independent implementation and is not
-affiliated with Docmost. It was inspired by
+[Apache License 2.0](LICENSE). The license does not cover the project name:
+forks are welcome under another name. This project is an independent
+implementation and is not affiliated with Docmost. It was inspired by
 [docmost-mcp-oss](https://github.com/abelsr/docmost-mcp-oss).

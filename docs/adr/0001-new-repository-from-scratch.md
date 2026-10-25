@@ -1,7 +1,8 @@
 # 0001. New repository, written from scratch; docmost-mcp-oss as a reference only
 
 ## Status
-Accepted. Replaces the earlier decision to fork and rework.
+Accepted. Replaces the earlier decision to fork and rework. The project
+license is now Apache 2.0, see ADR 0006; the rest of this decision stands.
 
 ## Context
 `abelsr/docmost-mcp-oss` (Python, FastMCP, MIT) solves the CE-specific parts: the internal Docmost REST API and, in older Docmost versions, page body editing through a Yjs WebSocket. It is built for one local user over stdio, and its HTTP mode has no authentication. The project is small (0 stars, 1 maintainer), so large upstream changes are unlikely to be merged.

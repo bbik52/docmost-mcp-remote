@@ -41,3 +41,12 @@ uv run pytest
 - One topic per pull request.
 - Describe what changed and why; link the roadmap phase or issue.
 - CI must be green.
+- Changes to authentication, OAuth, tokens, cryptography, the sign-in and
+  consent pages or the write path are reviewed with extra care; see
+  "Contributions and project security" in [docs/DESIGN.md](docs/DESIGN.md).
+
+## License of contributions
+
+The project is licensed under the [Apache License 2.0](LICENSE). By opening a
+pull request you agree that your contribution is licensed under the same
+terms (section 5 of the license). There is no separate contributor agreement.
