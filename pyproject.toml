@@ -1,6 +1,6 @@
 [project]
 name = "docmost-mcp-remote"
-version = "1.0.1"
+version = "1.0.2"
 description = "Remote MCP server for Docmost Community Edition, with per-member sign-in, OAuth 2.1 and scoped access."
 readme = "README.md"
 license = "Apache-2.0"
