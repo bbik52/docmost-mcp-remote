@@ -1,5 +1,7 @@
 # docmost-mcp-remote
 
+**English** · [Русский](https://github.com/bbik52/docmost-mcp-remote/blob/master/README.ru.md)
+
 [![CI](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
@@ -427,7 +429,6 @@ IMAGE_TAG=dev docker compose up -d
 ```
 
 See [CONTRIBUTING.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/CONTRIBUTING.md) and the [roadmap](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/ROADMAP.md).
-Русская версия: [README.ru.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/README.ru.md).
 
 ## License
 
