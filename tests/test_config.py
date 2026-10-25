@@ -85,3 +85,10 @@ def test_email_allowed() -> None:
 
 def test_empty_previous_key_is_none() -> None:
     assert make_settings(secret_key_previous="").secret_key_previous is None
+
+
+def test_allowed_spaces() -> None:
+    assert make_settings(allowed_spaces=" general, 01a17251 ,").allowed_spaces == {
+        "general",
+        "01a17251",
+    }

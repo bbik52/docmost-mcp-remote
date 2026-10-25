@@ -6,9 +6,24 @@ put it behind your domain, and let AI clients such as Claude, Claude Code or
 Cursor read and edit the wiki on behalf of each member, with that member's own
 Docmost rights.
 
-> **Status: pre-alpha.** Members can sign in and create personal tokens; the
-> only tool so far is `whoami`. Docmost tools arrive with 0.1.0. See the
+> **Status: pre-alpha.** Members can sign in, create personal tokens and read
+> their Docmost through the tools below. Writing and OAuth are next; see the
 > [roadmap](docs/ROADMAP.md).
+
+## Tools
+
+| Tool | Scope | What it does |
+|---|---|---|
+| `whoami` | read | The Docmost account, scopes and Docmost version of this connection |
+| `list_spaces` | read | Spaces you can access, with your role |
+| `list_pages` | read | Page tree of a space, one level at a time |
+| `recent_pages` | read | Recently updated pages |
+| `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
+| `search` | read | Full-text search with snippets |
+| `list_comments` | read | Comments and replies on a page |
+
+Page bodies, comments and snippets are returned inside a
+`<docmost-untrusted-content>` envelope so the model treats them as data.
 
 ## What it will do
 
@@ -83,6 +98,8 @@ Claude.ai connectors comes in a later release.
 | `SECRET_KEY` | yes | | At least 32 characters; encrypts stored Docmost sessions and signs cookies |
 | `SECRET_KEY_PREVIOUS` | no | | The old key during a rotation |
 | `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
+| `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
+| `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |

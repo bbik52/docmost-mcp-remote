@@ -14,6 +14,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY to a random value of at least 32 characters}
       SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ALLOWED_SPACES: ${ALLOWED_SPACES:-}
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       # The port is published on 127.0.0.1 only, so every client is a local proxy.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
