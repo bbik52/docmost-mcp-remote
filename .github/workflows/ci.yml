@@ -128,8 +128,10 @@ jobs:
           sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only/" .env
           sed -i "s/^SECRET_KEY=$/SECRET_KEY=$(openssl rand -hex 32)/" .env
           docker compose config --quiet
-      - name: Build and start the compose stack
-        run: docker compose up -d --build --wait --wait-timeout 120
+      - name: Build the image
+        run: docker build -t ghcr.io/bbik52/docmost-mcp-remote:ci .
+      - name: Start the compose stack
+        run: IMAGE_TAG=ci docker compose up -d --wait --wait-timeout 120
       - name: Smoke test
         run: |
           curl -fsS http://127.0.0.1:8000/healthz
@@ -137,6 +139,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp)" = 401
           curl -fsS http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp
           docker compose exec -T server docmost-mcp-remote admin members
+          test "$(docker image inspect -f '{{index .Config.Labels "io.modelcontextprotocol.server.name"}}' ghcr.io/bbik52/docmost-mcp-remote:ci)" = io.github.bbik52/docmost-mcp-remote
       - name: Logs
         if: always()
         run: docker compose logs

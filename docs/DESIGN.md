@@ -118,11 +118,11 @@ Consequences:
 ## Distribution (variant A: self-hosted only)
 Decision: v1 is a self-hosted server that each Admin runs on their own domain. No hosted multi-tenant service. Multi-tenancy is a possible later ADR; it would bring SSRF protection for user-supplied Docmost URLs, tenant isolation, a privacy policy and operations duties, none of which v1 needs.
 
-Discoverability checklist (to verify against each directory's current docs before release):
-- Official MCP Registry: `server.json` with the `$schema` line, name `io.github.bbik52/docmost-mcp-remote`, and an `mcp-name:` line in the PyPI README matching it.
-- GitHub topics: `mcp`, `mcp-server`, `docmost`, `model-context-protocol`, `oauth`; a one-sentence description with "Docmost" and "remote MCP server".
-- Publish the package to PyPI and the image to `ghcr.io` from GitHub Actions.
-- README starts with what it is, the supported Docmost versions, a security model section and a copy-paste `compose.yaml`.
+Discoverability checklist (verified against each directory's docs in October 2026; see [RELEASING.md](RELEASING.md)):
+- Official MCP Registry: `server.json` with `$schema` `https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json`, name `io.github.bbik52/docmost-mcp-remote`, a description of at most 100 characters, a PyPI package and an OCI package. Ownership is checked by an `mcp-name:` line in the PyPI README and by the `io.modelcontextprotocol.server.name` label on the image; both are in place and covered by `tests/test_release_metadata.py`. The release workflow publishes with `mcp-publisher` and GitHub OIDC. A `remotes` entry is not used: there is no single public URL, every Admin runs their own.
+- GitHub topics: `mcp`, `mcp-server`, `docmost`, `model-context-protocol`, `oauth`, `wiki`, `self-hosted`; a one-sentence description with "Docmost" and "remote MCP server".
+- Publish the package to PyPI (trusted publishing) and the image to `ghcr.io` (public) from GitHub Actions.
+- README starts with what it is, the supported Docmost versions, a security model section and a copy-paste `compose.yaml` (a test keeps the README copy equal to the file).
 - Directories that index GitHub (Glama and similar) pick the repo up from README and topics; word order in the repository name is not a documented factor.
 - The Anthropic connector directory is not a target for self-hosted setups (it expects one public URL operated by the developer).
 

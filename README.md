@@ -1,14 +1,32 @@
 # docmost-mcp-remote
 
-A remote [MCP](https://modelcontextprotocol.io) server for
+A self-hosted remote [MCP](https://modelcontextprotocol.io) server for
 [Docmost](https://docmost.com) Community Edition. Run it next to your Docmost,
-put it behind your domain, and let AI clients such as Claude, Claude Code or
-Cursor read and edit the wiki on behalf of each member, with that member's own
-Docmost rights.
+put it behind your domain, and let AI clients such as Claude, Claude Code,
+Cursor or VS Code read and edit the wiki on behalf of each member, with that
+member's own Docmost account and rights.
 
-> **Status: pre-alpha.** Members can connect OAuth clients or personal tokens
-> and read and edit their Docmost through the tools below. Security hardening
-> and the 1.0.0 release are next; see the [roadmap](docs/ROADMAP.md).
+<!-- mcp-name: io.github.bbik52/docmost-mcp-remote -->
+
+- **One server, one Docmost, many members.** Each member signs in with their
+  own Docmost account in the browser. Everything their AI client does is done
+  as them in Docmost.
+- **Authorization is mandatory.** OAuth 2.1 for remote connectors and personal
+  bearer tokens for scripts. There is no unauthenticated mode.
+- **Safe by default.** `read` is the only scope granted without asking.
+  Writing and moving to Trash need explicit scopes. Nothing is deleted
+  permanently, and the server keeps an encrypted snapshot of a page body
+  before every change.
+- **Self-hosted.** One container plus Postgres, with a ready `compose.yaml`.
+
+## Supported Docmost versions
+
+Docmost Community Edition **0.70.0 or newer**. Older versions are refused at
+sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
+0.97.0; newer releases work in most cases and log a warning until they are
+added to the tested range. Docmost users who sign in with SSO only (an
+Enterprise feature) cannot use this server: it signs in with email and
+password.
 
 ## Tools
 
@@ -40,27 +58,7 @@ its own database, encrypted, for `SNAPSHOT_RETENTION_DAYS`; if the snapshot
 cannot be saved, nothing is written. After the change it reads the page back
 and reports an error if Docmost did not apply it (this happens when Docmost
 runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
-were later deleted in Docmost until they expire. Pages are never deleted
-permanently.
-
-## What it will do
-
-- **One server, one Docmost, many members.** Each member signs in with their
-  own Docmost account in the browser. Everything they do through an AI client
-  is done as them in Docmost.
-- **Authorization is mandatory.** OAuth 2.1 for remote connectors and personal
-  bearer tokens for scripts. There is no unauthenticated mode.
-- **Safe by default.** New grants are read-only. Writing and moving to Trash
-  need explicit scopes. The server never deletes permanently and keeps a
-  snapshot of a page body before it overwrites it.
-- **Self-hosted.** A plain `compose.yaml` with the server and Postgres.
-
-## Supported Docmost versions
-
-Docmost Community Edition **0.70.0 or newer**. Older versions are refused at
-sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
-0.97.0; newer releases work in most cases and log a warning until they are
-added to the tested range.
+were later deleted in Docmost until they expire.
 
 ## Security model
 
@@ -83,41 +81,199 @@ the same account page.
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write` and `delete` only to clients you trust.
-Tool calls are limited per member and recorded in an audit log. See
-[docs/security-model.md](docs/security-model.md) for the threat model,
-[SECURITY.md](SECURITY.md) for how to report a vulnerability and
-[docs/DESIGN.md](docs/DESIGN.md) for the design.
+Tool calls are limited per member and recorded in an audit log. See the
+[threat model](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/security-model.md), [SECURITY.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/SECURITY.md) for
+how to report a vulnerability and the [design](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/DESIGN.md).
 
-## Running it (development preview)
+## Quick start
 
-```sh
-cp .env.example .env   # fill in PUBLIC_URL, DOCMOST_URL, POSTGRES_PASSWORD, SECRET_KEY
-docker compose up --build -d
-curl http://localhost:8000/healthz
+You need Docker with Compose, a Docmost reachable from the server, and a host
+name with https for the server itself, for example `mcp.example.com`.
+
+1. Download the compose file and the settings template:
+
+   ```sh
+   mkdir docmost-mcp && cd docmost-mcp
+   curl -fsSLO https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/compose.yaml
+   curl -fsSL -o .env https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/.env.example
+   ```
+
+2. Edit `.env`: set `PUBLIC_URL` (the https URL of this server),
+   `DOCMOST_URL`, a long random `POSTGRES_PASSWORD` and `SECRET_KEY`
+   (`openssl rand -hex 32` gives a good value for both). Consider
+   `ALLOWED_EMAILS` to limit who can sign in.
+
+3. Start it and check that it is up:
+
+   ```sh
+   docker compose up -d
+   curl http://127.0.0.1:8000/healthz
+   ```
+
+4. Put a reverse proxy with https in front of `127.0.0.1:8000` (see below)
+   and open `PUBLIC_URL/login` in a browser to check that you can sign in with
+   your Docmost account.
+
+5. Connect a client (see [Connecting a client](#connecting-a-client)).
+
+The server applies its database migrations at startup. Back up the Postgres
+volume like you back up Docmost: it holds the encrypted sessions, the
+snapshots and the audit log. Losing `SECRET_KEY` signs every member out and
+makes the snapshots unreadable.
+
+<details>
+<summary>The <code>compose.yaml</code></summary>
+
+```yaml
+# docmost-mcp-remote: the server and its Postgres.
+# Copy .env.example to .env and fill in the required values first, then put a
+# reverse proxy with https in front of port 8000.
+
+services:
+  server:
+    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.0.0 to pin one.
+    image: ghcr.io/bbik52/docmost-mcp-remote:${IMAGE_TAG:-1}
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL to the public https URL of this server}
+      DOCMOST_URL: ${DOCMOST_URL:?set DOCMOST_URL to the base URL of your Docmost}
+      DOCMOST_ALLOW_INSECURE_HTTP: ${DOCMOST_ALLOW_INSECURE_HTTP:-false}
+      DATABASE_URL: postgresql://docmost_mcp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/docmost_mcp
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY to a random value of at least 32 characters}
+      SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ALLOWED_SPACES: ${ALLOWED_SPACES:-}
+      RELOGIN_MODE: ${RELOGIN_MODE:-ask}
+      SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
+      TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
+      MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
+      # The port is published on 127.0.0.1 only, so every client is a local proxy.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docmost_mcp
+      POSTGRES_DB: docmost_mcp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docmost_mcp -d docmost_mcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
 ```
 
-The server applies its database migrations at startup. In production it
-must sit behind a reverse proxy that terminates https. `PUBLIC_URL` must be
-an https URL; plain http is only accepted for `localhost`.
+</details>
 
-### Connecting a client
+The server is also on PyPI (`pip install docmost-mcp-remote` or
+`uvx docmost-mcp-remote`) for setups without containers; it needs Postgres
+and the same settings as environment variables.
 
-**With OAuth** (Claude.ai and Claude Desktop connectors, Claude Code, Cursor,
-VS Code and other clients that support MCP authorization): add a remote MCP
-server with the URL `PUBLIC_URL/mcp`, for example
-`https://mcp.example.com/mcp`. The client opens a browser window; sign in with
-your Docmost email and password and choose what the client may do. `read` is
-always granted; tick `write` or `delete` only for clients you trust.
+## Reverse proxy
+
+The server listens on plain http and expects a reverse proxy that terminates
+https. Serve it at the root of its own host name; a sub-path is not
+supported. The proxy must not buffer responses, because MCP streams them.
+
+Caddy (gets certificates by itself):
+
+```caddyfile
+mcp.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+```
+
+nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name mcp.example.com;
+    ssl_certificate     /etc/letsencrypt/live/mcp.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+The server uses `X-Forwarded-For` for its per-IP rate limits. The compose
+file publishes the port on 127.0.0.1 only and trusts the header from every
+client; if you publish the port elsewhere, set `FORWARDED_ALLOW_IPS` to the
+proxy's address.
+
+## Connecting a client
+
+The MCP endpoint is `PUBLIC_URL/mcp`, for example
+`https://mcp.example.com/mcp`. Clients that support MCP authorization open a
+browser window: sign in with your Docmost email and password and choose what
+the client may do. `read` is always granted; tick `write` or `delete` only
+for clients you trust.
+
+**Claude.ai and Claude Desktop**: Settings, Connectors, Add custom connector,
+then enter the endpoint URL. The server must be reachable from the internet
+over https for Claude.ai.
+
+**Claude Code**:
 
 ```sh
 claude mcp add --transport http docmost https://mcp.example.com/mcp
+```
+
+Then run `/mcp` in Claude Code to sign in.
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "docmost": { "url": "https://mcp.example.com/mcp" }
+  }
+}
+```
+
+**VS Code** (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "docmost": { "type": "http", "url": "https://mcp.example.com/mcp" }
+  }
+}
 ```
 
 **With a personal token** (scripts and clients without OAuth):
 
 1. Open `PUBLIC_URL/login` and sign in with your Docmost email and password.
 2. On the account page, create a personal token with the scopes you need.
-3. Configure the client with the MCP endpoint `PUBLIC_URL/mcp` and the header
+3. Configure the client with the endpoint and the header
    `Authorization: Bearer <token>`:
 
    ```sh
@@ -125,9 +281,10 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
      --header "Authorization: Bearer dmr_..."
    ```
 
-Connected apps and tokens can be revoked on the account page.
+Connected apps and tokens are listed and revoked on the account page,
+`PUBLIC_URL/account`.
 
-### Administration
+## Administration
 
 The `admin` command runs where the server runs, with the same environment:
 
@@ -149,7 +306,11 @@ To rotate `SECRET_KEY`: set the old value as `SECRET_KEY_PREVIOUS` and a new
 `SECRET_KEY`, restart, run `admin rotate-key`, then remove
 `SECRET_KEY_PREVIOUS` and restart again.
 
-### Configuration
+To upgrade, run `docker compose pull && docker compose up -d`. The image tag
+`1` follows 1.x releases; set `IMAGE_TAG` in `.env` to pin a version. See the
+[changelog](https://github.com/bbik52/docmost-mcp-remote/blob/master/CHANGELOG.md).
+
+## Configuration
 
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
@@ -171,6 +332,7 @@ To rotate `SECRET_KEY`: set the old value as `SECRET_KEY_PREVIOUS` and a new
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (`*` in the compose file) |
 | `HOST` / `PORT` | no | `0.0.0.0` / `8000` | Listen address |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
+| `IMAGE_TAG` | no | `1` | Image tag used by `compose.yaml` |
 
 ## Development
 
@@ -191,11 +353,19 @@ DOCMOST_VERSION=0.97.0 docker compose -f tests/integration/compose.yaml up -d
 DOCMOST_TEST_URL=http://localhost:3000 uv run pytest tests/integration
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+To run the compose stack with a local build:
+
+```sh
+docker build -t ghcr.io/bbik52/docmost-mcp-remote:dev .
+IMAGE_TAG=dev docker compose up -d
+```
+
+See [CONTRIBUTING.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/CONTRIBUTING.md) and the [roadmap](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/ROADMAP.md).
+Русская версия: [README.ru.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/README.ru.md).
 
 ## License
 
-[Apache License 2.0](LICENSE). The license does not cover the project name:
-forks are welcome under another name. This project is an independent
+[Apache License 2.0](https://github.com/bbik52/docmost-mcp-remote/blob/master/LICENSE). The license does not cover the project
+name: forks are welcome under another name. This project is an independent
 implementation and is not affiliated with Docmost. It was inspired by
 [docmost-mcp-oss](https://github.com/abelsr/docmost-mcp-oss).
