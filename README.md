@@ -15,6 +15,10 @@ put it behind your domain, and let AI clients such as Claude, Claude Code,
 Cursor or VS Code read and edit the wiki on behalf of each member, with that
 member's own Docmost account and rights.
 
+> Independent community project, not affiliated with or endorsed by Docmost, Inc.
+> Docmost is a trademark of Docmost, Inc.; the name is used only to say which
+> software this server works with.
+
 <!-- mcp-name: io.github.bbik52/docmost-mcp-remote -->
 
 - **One server, one Docmost, many members.** Each member signs in with their

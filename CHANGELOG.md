@@ -7,6 +7,11 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Changed
+
+- README: a note near the top that the project is independent from
+  Docmost, Inc. and that Docmost is their trademark.
+
 ## [1.0.2] - 2026-10-25
 
 ### Changed
