@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import itertools
 import random
 
 import pytest
 
-from docmost_mcp_remote.docmost.positions import PositionError, position_between
+from docmost_mcp_remote.docmost.positions import DIGITS, PositionError, position_between
 
 # Keys as Docmost 0.97 writes them.
 EXISTING = ["a01bz", "a03j3", "a06gY", "a082B", "a17AT", "a3BKl", "aY77U"]
@@ -28,6 +29,13 @@ def test_empty_level() -> None:
         ("a082B", "a17AT"),
         ("a0VVV", "a0VVW"),
         ("Zz", "a0"),
+        # Docmost's random digits can end a key in 0.
+        ("a06f0", None),
+        (None, "a06f0"),
+        ("a06eZ", "a06f0"),
+        ("a06f0", "a06gY"),
+        ("a0VVV", "a10"),
+        ("a0VVV", "a1000"),
     ],
 )
 def test_between(low: str | None, high: str | None) -> None:
@@ -66,4 +74,13 @@ def test_errors() -> None:
     with pytest.raises(PositionError):
         position_between("!bad", None)
     with pytest.raises(PositionError):
-        position_between("a0VV0", None)
+        position_between("a06f0", "a06f00")
+
+
+def test_random_docmost_keys() -> None:
+    rng = random.Random(11)  # noqa: S311
+    keys = sorted({"a0" + "".join(rng.choices(DIGITS, k=3)) for _ in range(300)})
+    for low, high in itertools.pairwise(keys):
+        key = position_between(low, high)
+        assert _valid(key)
+        assert low < key < high
