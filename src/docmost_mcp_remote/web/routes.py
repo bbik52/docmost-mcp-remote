@@ -1,4 +1,4 @@
-"""Sign-in and account pages.
+"""Sign-in, account and OAuth consent pages.
 
 Plain server-rendered HTML forms. Every form carries a CSRF token that must
 match the token in the signed cookie. Pages are never cached and cannot be
@@ -8,13 +8,17 @@ framed.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import uuid
 from importlib.resources import files
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from jinja2 import Environment, PackageLoader, select_autoescape
+from mcp.server.auth.provider import AuthorizationParams, construct_redirect_uri
+from mcp.shared.auth import OAuthClientInformationFull
 from starlette.datastructures import FormData
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
@@ -22,26 +26,34 @@ from starlette.routing import Route
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.crypto import constant_time_equal, derive_key
+from docmost_mcp_remote.db.oauth_store import OAuthStore
 from docmost_mcp_remote.db.store import Store
 from docmost_mcp_remote.members import MemberService, SignInError
+from docmost_mcp_remote.oauth import CODE_TTL, CONSENT_PATH
 from docmost_mcp_remote.ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_SCOPES = ("read", "write", "delete")
 _LOGIN_COOKIE_AGE = 60 * 60
+_CSP = (
+    "default-src 'none'; style-src 'self'; form-action {form_action}; "
+    "frame-ancestors 'none'; base-uri 'none'"
+)
 _SECURITY_HEADERS = {
     "Cache-Control": "no-store",
-    "Content-Security-Policy": (
-        "default-src 'none'; style-src 'self'; form-action 'self'; "
-        "frame-ancestors 'none'; base-uri 'none'"
-    ),
+    "Content-Security-Policy": _CSP.format(form_action="'self'"),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
 _STYLE = files("docmost_mcp_remote.web").joinpath("style.css").read_text()
+_CSP_SOURCE = re.compile(r"[a-z][a-z0-9+.-]*:(//[A-Za-z0-9.\[\]:-]+)?")
 _TOO_MANY = "Too many sign-in attempts. Wait a few minutes and try again."
+_EXPIRED_REQUEST = (
+    "This authorization request has expired or was already answered. "
+    "Start the connection again from your app."
+)
 
 
 def safe_next(value: str | None) -> str:
@@ -51,10 +63,45 @@ def safe_next(value: str | None) -> str:
     return "/account"
 
 
+def _redirect_source(uri: str) -> str:
+    """The CSP source that lets the consent form redirect to ``uri``.
+
+    Browsers apply ``form-action`` to the redirect that follows a form post.
+    """
+    parts = urlsplit(uri)
+    if parts.scheme in ("http", "https"):
+        host = parts.hostname or ""
+        if ":" in host:
+            host = f"[{host}]"
+        source = f"{parts.scheme}://{host}" + (f":{parts.port}" if parts.port else "")
+    else:
+        source = f"{parts.scheme}:"
+    # Anything else could inject directives into the policy.
+    return source if _CSP_SOURCE.fullmatch(source) else ""
+
+
+def _requested_scopes(client: OAuthClientInformationFull, params: AuthorizationParams) -> set[str]:
+    """Scopes offered on the consent page.
+
+    Without a ``scope`` parameter the member may grant what the client registered for.
+    """
+    if params.scopes:
+        return set(params.scopes)
+    return set(client.scope.split()) if client.scope else set(ALLOWED_SCOPES)
+
+
+def _redirect_host(uri: str) -> str:
+    parts = urlsplit(uri)
+    return parts.netloc or f"{parts.scheme}:"
+
+
 class WebPages:
-    def __init__(self, settings: Settings, store: Store, members: MemberService) -> None:
+    def __init__(
+        self, settings: Settings, store: Store, oauth: OAuthStore, members: MemberService
+    ) -> None:
         self._settings = settings
         self._store = store
+        self._oauth = oauth
         self._members = members
         secret = settings.secret_key.get_secret_value()
         self._signer = URLSafeTimedSerializer(derive_key(secret, "web-cookies-v1").hex())
@@ -83,13 +130,22 @@ class WebPages:
             Route("/account", self.account, methods=["GET"]),
             Route("/account/tokens", self.create_token, methods=["POST"]),
             Route("/account/grants/{grant_id}/revoke", self.revoke_grant, methods=["POST"]),
+            Route(CONSENT_PATH, self.consent_form, methods=["GET"]),
+            Route(CONSENT_PATH, self.consent_submit, methods=["POST"]),
         ]
 
     # Rendering and cookies
 
-    def _render(self, name: str, status: int = 200, **context: Any) -> HTMLResponse:
+    def _render(
+        self, name: str, status: int = 200, *, headers: dict[str, str] | None = None, **context: Any
+    ) -> HTMLResponse:
         html = self._templates.get_template(name).render(**context)
-        return HTMLResponse(html, status_code=status, headers=_SECURITY_HEADERS)
+        return HTMLResponse(
+            html, status_code=status, headers={**_SECURITY_HEADERS, **(headers or {})}
+        )
+
+    def _message(self, title: str, message: str, status: int) -> HTMLResponse:
+        return self._render("message.html", status=status, title=title, message=message)
 
     def _set_cookie(self, response: Response, name: str, value: Any, max_age: int) -> None:
         response.set_cookie(
@@ -262,3 +318,101 @@ class WebPages:
         if await self._store.revoke_grant(uuid.UUID(session["m"]), grant_id):
             logger.info("Member %s revoked grant %s", session["m"], grant_id)
         return RedirectResponse("/account", status_code=303)
+
+    # OAuth consent
+
+    async def _pending_request(
+        self, request_id: str
+    ) -> tuple[OAuthClientInformationFull, AuthorizationParams] | None:
+        if not request_id or len(request_id) > 200:
+            return None
+        pending = await self._oauth.load_request(request_id)
+        if pending is None:
+            return None
+        client_id, params_json = pending
+        info = await self._oauth.load_client(client_id)
+        if info is None:
+            return None
+        client = OAuthClientInformationFull.model_validate_json(info)
+        return client, AuthorizationParams.model_validate_json(params_json)
+
+    async def consent_form(self, request: Request) -> Response:
+        request_id = request.query_params.get("request", "")
+        session = self._web_session(request)
+        if session is None:
+            next_path = f"{CONSENT_PATH}?request={quote(request_id, safe='')}"
+            return RedirectResponse(f"/login?next={quote(next_path, safe='')}", status_code=303)
+        member_id = uuid.UUID(session["m"])
+        member = await self._store.get_member(member_id)
+        if member is None or await self._store.member_disabled(member_id):
+            return RedirectResponse("/login", status_code=303)
+        pending = await self._pending_request(request_id)
+        if pending is None:
+            return self._message("Request expired", _EXPIRED_REQUEST, 400)
+        client, params = pending
+        redirect_uri = str(params.redirect_uri)
+        csp = _CSP.format(form_action=f"'self' {_redirect_source(redirect_uri)}")
+        return self._render(
+            "consent.html",
+            headers={"Content-Security-Policy": csp},
+            member=member,
+            client_name=(client.client_name or "An unnamed app")[:100],
+            redirect_host=_redirect_host(redirect_uri),
+            requested=_requested_scopes(client, params),
+            request_id=request_id,
+            csrf=session["c"],
+        )
+
+    async def consent_submit(self, request: Request) -> Response:
+        session = self._web_session(request)
+        if session is None:
+            return RedirectResponse("/login", status_code=303)
+        form = await request.form()
+        if not self._csrf_ok(form, session.get("c")):
+            return self._message(
+                "Form expired", "The form expired. Start again from your app.", 400
+            )
+        request_id = str(form.get("request") or "")
+        pending = await self._pending_request(request_id)
+        # Deleting the request makes every answer single use.
+        if pending is None or not await self._oauth.delete_request(request_id):
+            return self._message("Request expired", _EXPIRED_REQUEST, 400)
+        member_id = uuid.UUID(session["m"])
+        if await self._store.member_disabled(member_id):
+            return RedirectResponse("/login", status_code=303)
+        client, params = pending
+        redirect_uri = str(params.redirect_uri)
+        if form.get("action") != "approve":
+            logger.info("Member %s denied OAuth client %s", member_id, client.client_id)
+            return RedirectResponse(
+                construct_redirect_uri(redirect_uri, error="access_denied", state=params.state),
+                status_code=303,
+                headers={"Cache-Control": "no-store"},
+            )
+        requested = _requested_scopes(client, params)
+        ticked = {str(value) for value in form.getlist("scope")}
+        scopes = frozenset({"read"} | (ticked & requested & set(ALLOWED_SCOPES)))
+        if client.client_id is None:
+            return self._message("Request expired", _EXPIRED_REQUEST, 400)
+        code = await self._oauth.create_grant_with_code(
+            member_id=member_id,
+            client_id=client.client_id,
+            client_name=client.client_name or client.client_id,
+            scopes=scopes,
+            code_challenge=params.code_challenge,
+            redirect_uri=redirect_uri,
+            redirect_uri_provided_explicitly=params.redirect_uri_provided_explicitly,
+            resource=params.resource,
+            ttl=CODE_TTL,
+        )
+        logger.info(
+            "Member %s allowed OAuth client %s with scopes %s",
+            member_id,
+            client.client_id,
+            sorted(scopes),
+        )
+        return RedirectResponse(
+            construct_redirect_uri(redirect_uri, code=code, state=params.state),
+            status_code=303,
+            headers={"Cache-Control": "no-store"},
+        )

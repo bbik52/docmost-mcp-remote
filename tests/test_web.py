@@ -89,7 +89,7 @@ def test_sign_in_and_tokens(web: TestClient) -> None:
         f"/account/grants/{grant_id.group(1)}/revoke", data={"csrf": csrf}, follow_redirects=False
     )
     assert revoked.status_code == 303
-    assert "No tokens yet" in web.get("/account").text
+    assert "No tokens or connected apps yet" in web.get("/account").text
 
 
 def test_account_forms_need_csrf(web: TestClient) -> None:

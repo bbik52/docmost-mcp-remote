@@ -26,7 +26,7 @@
       <tr>
         <td>{{ grant.name }}</td>
         <td>{{ grant.scopes | sort | join(", ") }}</td>
-        <td><code>{{ grant.token_hint }}…</code></td>
+        <td>{% if grant.kind == "oauth" %}OAuth app{% else %}<code>{{ grant.token_hint }}…</code>{% endif %}</td>
         <td>{{ grant.created_at.strftime("%Y-%m-%d") }}</td>
         <td>{{ grant.last_used_at.strftime("%Y-%m-%d %H:%M") if grant.last_used_at else "never" }}</td>
         <td><form method="post" action="/account/grants/{{ grant.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger" type="submit">Revoke</button></form></td>
@@ -35,7 +35,7 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">No tokens yet.</p>
+  <p class="muted">No tokens or connected apps yet.</p>
   {% endif %}
 </section>
 
