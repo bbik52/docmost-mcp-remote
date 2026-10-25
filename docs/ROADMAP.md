@@ -183,7 +183,7 @@ Scope:
   Cursor), configuration reference.
 - Release workflow on tag: multi-arch image to `ghcr.io`, package to PyPI via
   trusted publishing, GitHub release with changelog. Signing the image and
-  DCO sign-offs are deferred (ADR 0006).
+  DCO sign-offs are deferred (ADR 0006). Steps in `docs/RELEASING.md`.
 - `server.json` and `mcp-name:` line; publish to the official MCP Registry as
   `io.github.bbik52/docmost-mcp-remote`.
 - GitHub topics and description; `README.ru.md`.

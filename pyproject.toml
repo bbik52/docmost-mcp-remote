@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 authors = [{ name = "bbik52" }]
 keywords = ["mcp", "mcp-server", "docmost", "model-context-protocol", "oauth", "wiki"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: System Administrators",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -33,6 +33,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/bbik52/docmost-mcp-remote"
+Changelog = "https://github.com/bbik52/docmost-mcp-remote/blob/master/CHANGELOG.md"
 Issues = "https://github.com/bbik52/docmost-mcp-remote/issues"
 Security = "https://github.com/bbik52/docmost-mcp-remote/security/policy"
 

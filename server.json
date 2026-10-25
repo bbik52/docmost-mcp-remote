@@ -1,0 +1,91 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.bbik52/docmost-mcp-remote",
+  "title": "Docmost (self-hosted)",
+  "description": "Self-hosted remote MCP server for Docmost CE: members read and edit the wiki as themselves",
+  "websiteUrl": "https://github.com/bbik52/docmost-mcp-remote",
+  "repository": {
+    "url": "https://github.com/bbik52/docmost-mcp-remote",
+    "source": "github"
+  },
+  "version": "0.0.1",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/bbik52/docmost-mcp-remote:0.0.1",
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-p",
+          "value": "127.0.0.1:8000:8000"
+        }
+      ],
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8000/mcp"
+      },
+      "environmentVariables": [
+        {
+          "name": "PUBLIC_URL",
+          "description": "Public URL of this server: http://localhost:8000 locally, or the https URL of your reverse proxy",
+          "isRequired": true,
+          "default": "http://localhost:8000"
+        },
+        {
+          "name": "DOCMOST_URL",
+          "description": "Base URL of your Docmost, Community Edition 0.70.0 or newer",
+          "isRequired": true
+        },
+        {
+          "name": "DATABASE_URL",
+          "description": "Postgres URL for the server's own data, e.g. postgresql://user:password@host/db",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SECRET_KEY",
+          "description": "Random value of at least 32 characters; encrypts stored Docmost sessions",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    },
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "docmost-mcp-remote",
+      "version": "0.0.1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8000/mcp"
+      },
+      "environmentVariables": [
+        {
+          "name": "PUBLIC_URL",
+          "description": "Public URL of this server: http://localhost:8000 locally, or the https URL of your reverse proxy",
+          "isRequired": true,
+          "default": "http://localhost:8000"
+        },
+        {
+          "name": "DOCMOST_URL",
+          "description": "Base URL of your Docmost, Community Edition 0.70.0 or newer",
+          "isRequired": true
+        },
+        {
+          "name": "DATABASE_URL",
+          "description": "Postgres URL for the server's own data, e.g. postgresql://user:password@host/db",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SECRET_KEY",
+          "description": "Random value of at least 32 characters; encrypts stored Docmost sessions",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
