@@ -76,9 +76,9 @@ Done when:
 ## Phase 3. Members, Postgres and bearer tokens
 
 Scope:
-- Postgres schema with migrations (Alembic): members, Docmost sessions
-  (encrypted), personal tokens (hashed), grants with scopes, snapshots,
-  audit log (tables created now, used in later phases).
+- Postgres schema with migrations (Alembic), applied at startup: members,
+  Docmost sessions (encrypted), grants with scopes, tokens (hashed). Later
+  phases add their own tables (snapshots, audit log) in new migrations.
 - Encryption of Docmost tokens with a key from `SECRET_KEY` (envelope with key
   id, supports rotation via `SECRET_KEY_PREVIOUS`).
 - Login page: Member enters Docmost email and password, the server logs in to
