@@ -26,6 +26,8 @@ def main() -> None:
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # Request lines of the HTTP client add noise and are not needed to operate the server.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     logger.info("Starting docmost-mcp-remote %s", __version__)
     if settings.docmost_url_is_insecure:
         logger.warning("DOCMOST_URL uses http: Docmost credentials and tokens travel unencrypted")
@@ -36,6 +38,7 @@ def main() -> None:
         port=settings.port,
         log_level=settings.log_level,
         proxy_headers=True,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
         server_header=False,
     )
 

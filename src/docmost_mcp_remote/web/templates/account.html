@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Account · Docmost MCP{% endblock %}
+{% block body %}
+<header class="row">
+  <h1>{{ member.name or member.email }}</h1>
+  <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" type="submit">Sign out</button></form>
+</header>
+<p class="muted">Signed in as {{ member.email }}. AI clients act in Docmost as you, with your rights.</p>
+
+{% if new_token %}
+<section class="notice">
+  <h2>New token</h2>
+  <p>Copy it now. It is shown only once.</p>
+  <code class="token">{{ new_token }}</code>
+  <p class="muted">MCP endpoint: <code>{{ mcp_url }}</code>, header <code>Authorization: Bearer &lt;token&gt;</code></p>
+</section>
+{% endif %}
+
+<section>
+  <h2>Access</h2>
+  {% if grants %}
+  <table>
+    <thead><tr><th>Name</th><th>Scopes</th><th>Token</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+    {% for grant in grants %}
+      <tr>
+        <td>{{ grant.name }}</td>
+        <td>{{ grant.scopes | sort | join(", ") }}</td>
+        <td><code>{{ grant.token_hint }}…</code></td>
+        <td>{{ grant.created_at.strftime("%Y-%m-%d") }}</td>
+        <td>{{ grant.last_used_at.strftime("%Y-%m-%d %H:%M") if grant.last_used_at else "never" }}</td>
+        <td><form method="post" action="/account/grants/{{ grant.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger" type="submit">Revoke</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No tokens yet.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Create a personal token</h2>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/account/tokens">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name <input type="text" name="name" maxlength="100" placeholder="Claude Code on my laptop" required></label>
+    <fieldset>
+      <legend>Scopes</legend>
+      <label class="check"><input type="checkbox" checked disabled> read: read pages, comments and search</label>
+      <label class="check"><input type="checkbox" name="scope" value="write"> write: create and edit pages and comments</label>
+      <label class="check"><input type="checkbox" name="scope" value="delete"> delete: move pages to Trash and restore them</label>
+    </fieldset>
+    <button type="submit">Create token</button>
+  </form>
+  <p class="muted">Page content can contain instructions aimed at the AI. Grant write and delete only to clients you trust.</p>
+</section>
+{% endblock %}

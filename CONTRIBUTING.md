@@ -19,7 +19,8 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.12 or newer.
 
 ```sh
 uv sync
-uv run pytest
+docker run -d -p 5433:5432 -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test postgres:17-alpine
+DATABASE_TEST_URL=postgresql://test:test@localhost:5433/test uv run pytest
 ```
 
 Before pushing:

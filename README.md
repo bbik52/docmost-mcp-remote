@@ -6,9 +6,9 @@ put it behind your domain, and let AI clients such as Claude, Claude Code or
 Cursor read and edit the wiki on behalf of each member, with that member's own
 Docmost rights.
 
-> **Status: pre-alpha.** The repository currently holds the project skeleton.
-> No tools are available yet. See the [roadmap](docs/ROADMAP.md) for what comes
-> next and when.
+> **Status: pre-alpha.** Members can sign in and create personal tokens; the
+> only tool so far is `whoami`. Docmost tools arrive with 0.1.0. See the
+> [roadmap](docs/ROADMAP.md).
 
 ## What it will do
 
@@ -31,6 +31,13 @@ added to the tested range.
 
 ## Security model
 
+Members sign in with their own Docmost account; everything a client does is
+done as that member, with their Docmost rights. The server keeps the Docmost
+session token encrypted with a key derived from `SECRET_KEY` and does not
+store passwords unless `RELOGIN_MODE=stored_password`. Personal tokens are
+stored as hashes and shown once. The sign-in page has CSRF protection and
+per-IP and per-email rate limits.
+
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write` and `delete` only to clients you trust. See
@@ -40,14 +47,30 @@ member granted, so grant `write` and `delete` only to clients you trust. See
 ## Running it (development preview)
 
 ```sh
-cp .env.example .env   # fill in PUBLIC_URL, DOCMOST_URL and POSTGRES_PASSWORD
-docker compose up --build
+cp .env.example .env   # fill in PUBLIC_URL, DOCMOST_URL, POSTGRES_PASSWORD, SECRET_KEY
+docker compose up --build -d
 curl http://localhost:8000/healthz
 ```
 
-In production the server must sit behind a reverse proxy that terminates
-https. `PUBLIC_URL` must be an https URL; plain http is only accepted for
-`localhost`.
+The server applies its database migrations at startup. In production it
+must sit behind a reverse proxy that terminates https. `PUBLIC_URL` must be
+an https URL; plain http is only accepted for `localhost`.
+
+### Connecting a client
+
+1. Open `PUBLIC_URL/login` and sign in with your Docmost email and password.
+2. On the account page, create a personal token. New tokens can read; tick
+   `write` or `delete` only for clients you trust.
+3. Configure the client with the MCP endpoint `PUBLIC_URL/mcp` and the header
+   `Authorization: Bearer <token>`. For Claude Code:
+
+   ```sh
+   claude mcp add --transport http docmost https://mcp.example.com/mcp \
+     --header "Authorization: Bearer dmr_..."
+   ```
+
+Tokens can be revoked on the same page. OAuth sign-in for clients such as
+Claude.ai connectors comes in a later release.
 
 ### Configuration
 
@@ -56,9 +79,14 @@ https. `PUBLIC_URL` must be an https URL; plain http is only accepted for
 | `PUBLIC_URL` | yes | | Public https URL of this server |
 | `DOCMOST_URL` | yes | | Base URL of your Docmost |
 | `DOCMOST_ALLOW_INSECURE_HTTP` | no | `false` | Allow an `http://` `DOCMOST_URL` on a trusted private network |
+| `DATABASE_URL` | yes | | Postgres URL (`postgresql://user:password@host/db`) |
+| `SECRET_KEY` | yes | | At least 32 characters; encrypts stored Docmost sessions and signs cookies |
+| `SECRET_KEY_PREVIOUS` | no | | The old key during a rotation |
+| `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
+| `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
-| `DATABASE_URL` | no (yet) | | Postgres URL; becomes required with member sign-in |
+| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (`*` in the compose file) |
 | `HOST` / `PORT` | no | `0.0.0.0` / `8000` | Listen address |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
 
@@ -68,8 +96,11 @@ https. `PUBLIC_URL` must be an https URL; plain http is only accepted for
 uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
-uv run pytest
+DATABASE_TEST_URL=postgresql://test:test@localhost:5433/test uv run pytest
 ```
+
+Tests that need Postgres are skipped without `DATABASE_TEST_URL`; for example
+`docker run -d -p 5433:5432 -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test postgres:17-alpine`.
 
 Integration tests run against a real Docmost:
 

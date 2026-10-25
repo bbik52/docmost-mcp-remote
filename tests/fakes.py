@@ -42,3 +42,43 @@ class Recorder:
         return CeDocmostClient(
             "https://docs.example.com", transport=httpx.MockTransport(self), **kwargs
         )
+
+
+def docmost_routes(
+    *,
+    password: str = "pw",
+    token: str = "docmost-token",
+    version: str = "0.97.0",
+    email: str = "anna@example.com",
+) -> dict[str, Handler | httpx.Response]:
+    """Routes of a Docmost with one user, for sign-in flows."""
+
+    def login(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content).get("password") != password:
+            return error(401, "Email or password does not match")
+        return ok(None, headers={"set-cookie": f"authToken={token}; Path=/; HttpOnly"})
+
+    def authed(data: Any) -> Handler:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.headers.get("authorization") != f"Bearer {token}":
+                return error(401, "Unauthorized")
+            return ok(data)
+
+        return handler
+
+    return {
+        "/api/health": httpx.Response(200, json={"status": "ok"}),
+        "/api/auth/login": login,
+        "/api/version": authed({"currentVersion": version}),
+        "/api/users/me": authed(
+            {
+                "user": {
+                    "id": "docmost-user-1",
+                    "email": email,
+                    "name": "Anna",
+                    "role": "member",
+                    "workspaceId": "w1",
+                }
+            }
+        ),
+    }

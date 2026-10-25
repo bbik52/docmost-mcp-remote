@@ -9,13 +9,21 @@ from typing import Any
 
 import httpx
 from fastmcp import FastMCP
+from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from docmost_mcp_remote import __version__
+from docmost_mcp_remote.auth import StoreTokenVerifier
 from docmost_mcp_remote.config import Settings
+from docmost_mcp_remote.crypto import Cipher
+from docmost_mcp_remote.db.engine import create_engine, migrate
+from docmost_mcp_remote.db.store import Store
 from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostError
+from docmost_mcp_remote.members import MemberService
+from docmost_mcp_remote.tools import account
+from docmost_mcp_remote.web.routes import WebPages
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +44,25 @@ def create_docmost_client(settings: Settings) -> CeDocmostClient:
     )
 
 
-def create_server(settings: Settings, docmost: DocmostClient | None = None) -> FastMCP:
-    """Build the MCP server. Tools are registered here as later phases add them."""
+def create_server(
+    settings: Settings,
+    docmost: DocmostClient | None = None,
+    engine: AsyncEngine | None = None,
+) -> FastMCP:
+    """Build the MCP server with its web pages and tools."""
     client = docmost or create_docmost_client(settings)
+    database_url = settings.database_url.get_secret_value()
+    db = engine or create_engine(database_url)
+    store = Store(db)
+    cipher = Cipher(
+        settings.secret_key.get_secret_value(),
+        settings.secret_key_previous.get_secret_value() if settings.secret_key_previous else None,
+    )
+    members = MemberService(settings, store, client, cipher)
 
     @asynccontextmanager
     async def lifespan(_: FastMCP[Any]) -> AsyncIterator[dict[str, Any]]:
+        await migrate(database_url)
         try:
             await client.check_reachable()
         except DocmostError as exc:
@@ -50,15 +71,18 @@ def create_server(settings: Settings, docmost: DocmostClient | None = None) -> F
         else:
             logger.info("Docmost is reachable")
         try:
-            yield {"docmost": client}
+            yield {}
         finally:
             await client.aclose()
+            if engine is None:
+                await db.dispose()
 
     mcp = FastMCP(
         name="docmost-mcp-remote",
         instructions=INSTRUCTIONS,
         version=__version__,
         website_url="https://github.com/bbik52/docmost-mcp-remote",
+        auth=StoreTokenVerifier(store, settings.public_base),
         mask_error_details=True,
         lifespan=lifespan,
     )
@@ -67,9 +91,20 @@ def create_server(settings: Settings, docmost: DocmostClient | None = None) -> F
     async def healthz(_: Request) -> Response:
         return JSONResponse({"status": "ok", "version": __version__})
 
+    pages = WebPages(settings, store, members)
+    for route in pages.routes():
+        mcp.custom_route(route.path, methods=sorted(route.methods or []), include_in_schema=False)(
+            route.endpoint
+        )
+
+    account.register(mcp, members)
     return mcp
 
 
-def create_app(settings: Settings, docmost: DocmostClient | None = None) -> Starlette:
+def create_app(
+    settings: Settings,
+    docmost: DocmostClient | None = None,
+    engine: AsyncEngine | None = None,
+) -> Starlette:
     """Build the ASGI application served by uvicorn."""
-    return create_server(settings, docmost).http_app(path=MCP_PATH)
+    return create_server(settings, docmost, engine).http_app(path=MCP_PATH)

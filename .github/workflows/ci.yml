@@ -27,6 +27,20 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_TEST_URL: postgresql://test:test@localhost:5432/test
     strategy:
       fail-fast: false
       matrix:
@@ -67,9 +81,22 @@ jobs:
         include:
           - docmost: latest
             canary: true
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U test" --health-interval 2s --health-timeout 3s
+          --health-retries 30
     env:
       DOCMOST_VERSION: ${{ matrix.docmost }}
       DOCMOST_TEST_URL: http://localhost:3000
+      DATABASE_TEST_URL: postgresql://test:test@localhost:5433/test
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
@@ -95,21 +122,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Validate compose file
+      - name: Prepare .env
         run: |
           cp .env.example .env
-          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only/' .env
+          sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only/" .env
+          sed -i "s/^SECRET_KEY=$/SECRET_KEY=$(openssl rand -hex 32)/" .env
           docker compose config --quiet
-      - name: Build image
-        run: docker build -t docmost-mcp-remote:ci .
+      - name: Build and start the compose stack
+        run: docker compose up -d --build --wait --wait-timeout 120
       - name: Smoke test
         run: |
-          docker run -d --name smoke -p 8000:8000 --read-only --cap-drop ALL \
-            -e PUBLIC_URL=https://mcp.example.com -e DOCMOST_URL=https://docs.example.com \
-            docmost-mcp-remote:ci
-          for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8000/healthz; then exit 0; fi
-            sleep 1
-          done
-          docker logs smoke
-          exit 1
+          curl -fsS http://127.0.0.1:8000/healthz
+          curl -fsS -o /dev/null http://127.0.0.1:8000/login
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp)" = 401
+      - name: Logs
+        if: always()
+        run: docker compose logs
