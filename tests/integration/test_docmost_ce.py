@@ -30,6 +30,8 @@ async def _body_contains(session: CeDocmostSession, page_id: str, text: str) -> 
 
 async def test_version_is_supported(owner: CeDocmostSession) -> None:
     check = await owner.version()
+    if check.version is None:
+        pytest.skip("Docmost did not report its version: its request to GitHub failed")
     assert check.tested, f"Docmost {check.version} is newer than the tested range"
 
 

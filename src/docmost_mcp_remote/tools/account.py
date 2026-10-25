@@ -32,7 +32,7 @@ def register(mcp: FastMCP, members: MemberService) -> None:
                 "email": user.email,
                 "docmost_role": user.role,
                 "scopes": sorted(current_scopes()),
-                "docmost_version": str(check.version),
+                "docmost_version": str(check.version) if check.version else "unknown",
             }
 
         return await as_member(members, action)
