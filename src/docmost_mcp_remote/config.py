@@ -29,6 +29,17 @@ class Settings(BaseSettings):
         default=False,
         description="Allow an http:// DOCMOST_URL, for a Docmost on a trusted private network.",
     )
+    docmost_timeout_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        le=120,
+        description="Timeout for one request to Docmost.",
+    )
+    docmost_max_response_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=64 * 1024,
+        description="Largest Docmost response the server reads; larger answers fail.",
+    )
     database_url: str | None = Field(
         default=None,
         description="Postgres connection URL. Required from the release that adds Member sign-in.",

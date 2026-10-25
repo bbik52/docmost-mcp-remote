@@ -53,6 +53,44 @@ jobs:
           uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt
           uv run pip-audit --strict --disable-pip --require-hashes -r requirements.txt
 
+  integration:
+    name: integration (Docmost ${{ matrix.docmost }})
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.canary }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported, previous and newest tested release. "latest" warns early
+        # when a new Docmost release is out and the tested range needs a bump.
+        docmost: ["0.70.3", "0.96.0", "0.97.0"]
+        canary: [false]
+        include:
+          - docmost: latest
+            canary: true
+    env:
+      DOCMOST_VERSION: ${{ matrix.docmost }}
+      DOCMOST_TEST_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Start Docmost
+        run: docker compose -f tests/integration/compose.yaml up -d --wait --wait-timeout 180
+      - name: Wait for Docmost
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/api/health; then exit 0; fi
+            sleep 2
+          done
+          docker compose -f tests/integration/compose.yaml logs docmost
+          exit 1
+      - run: uv sync --locked
+      - run: uv run pytest tests/integration
+      - name: Docmost logs
+        if: failure()
+        run: docker compose -f tests/integration/compose.yaml logs docmost
+
   docker:
     runs-on: ubuntu-latest
     steps:
