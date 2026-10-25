@@ -1,5 +1,12 @@
 # docmost-mcp-remote
 
+[![CI](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
+[![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
+[![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#поддерживаемые-версии-docmost)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/bbik52/docmost-mcp-remote/blob/master/LICENSE)
+
 Самостоятельно размещаемый удалённый [MCP](https://modelcontextprotocol.io)-сервер
 для [Docmost](https://docmost.com) Community Edition. Запустите его рядом со
 своим Docmost, опубликуйте на своём домене, и ИИ-клиенты (Claude, Claude Code,
@@ -19,6 +26,31 @@ Cursor, VS Code) смогут читать и редактировать вик�
   безвозвратно, а перед каждым изменением сервер сохраняет зашифрованный
   снимок страницы.
 - **Своя инсталляция.** Один контейнер и Postgres, готовый `compose.yaml`.
+
+## Как это устроено
+
+```mermaid
+flowchart LR
+    member(["Участник"]) -. "один раз входит<br/>своей учёткой Docmost" .-> server
+    client["ИИ-клиент<br/>Claude, Cursor, VS Code"] -- "MCP over https<br/>OAuth 2.1 или персональный токен" --> server["docmost-mcp-remote"]
+    server -- "API Docmost<br/>от имени участника" --> docmost["Docmost CE"]
+    server --- db[("Postgres<br/>сессии, снимки,<br/>журнал аудита")]
+```
+
+При первом подключении клиента участник входит своей почтой и паролем
+Docmost и выбирает, что клиенту разрешено. Все подключённые приложения и
+токены видны на странице аккаунта, там же их можно отозвать.
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/consent.png" alt="The consent page: allow Claude to use Docmost as you, with read, write and delete scopes"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/account.png" alt="The account page with connected apps, personal tokens and the form to create a token"></td>
+</tr>
+<tr>
+<td align="center">Выбор прав для клиента</td>
+<td align="center">Подключённые приложения и персональные токены</td>
+</tr>
+</table>
 
 ## Поддерживаемые версии Docmost
 

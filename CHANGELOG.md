@@ -7,6 +7,12 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Changed
+
+- README: badges, a diagram of how the server fits between AI clients and
+  Docmost, and screenshots of the consent and account pages.
+- Dependabot opens its pull requests against `develop`.
+
 ## [1.0.1] - 2026-10-25
 
 ### Fixed
