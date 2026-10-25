@@ -245,6 +245,15 @@ async def test_version_supported(version: str, tested: bool) -> None:
     assert str(result.version) == version
 
 
+@pytest.mark.parametrize("body", [None, {}, {"currentVersion": ""}])
+async def test_version_not_reported(body: dict[str, str] | None) -> None:
+    # Docmost answers with an empty body when its own request to GitHub fails.
+    mock = Recorder({"/api/version": ok(body)})
+    result = await mock.client().session("t").version()
+    assert result.version is None
+    assert result.tested is False
+
+
 async def test_version_too_old() -> None:
     mock = Recorder({"/api/version": ok({"currentVersion": "0.25.3"})})
     with pytest.raises(UnsupportedDocmostVersionError, match=r"0\.70\.0 or newer"):

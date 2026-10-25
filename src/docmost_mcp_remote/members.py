@@ -69,7 +69,12 @@ class MemberService:
         except DocmostError as exc:
             logger.warning("Sign-in failed: %s", exc)
             raise SignInError(GENERIC_SIGN_IN_ERROR) from None
-        if not check.tested:
+        if check.version is None:
+            logger.warning(
+                "Docmost did not report its version (its version check against GitHub "
+                "failed); assuming a supported version"
+            )
+        elif not check.tested:
             logger.warning(
                 "Docmost %s is newer than the tested versions; please report problems",
                 check.version,

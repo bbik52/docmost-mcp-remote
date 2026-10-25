@@ -224,7 +224,8 @@ class CeDocmostSession:
 
     async def version(self) -> VersionCheck:
         data = await self._call("version", {})
-        return check_version(str(data.get("currentVersion", "")))
+        reported = data.get("currentVersion") if isinstance(data, dict) else None
+        return check_version(str(reported or ""))
 
     async def list_spaces(self, *, cursor: str | None = None, limit: int = 50) -> Paginated[Space]:
         data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})

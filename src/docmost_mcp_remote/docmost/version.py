@@ -35,12 +35,20 @@ MAX_TESTED = Version(0, 97, 0)
 
 
 class VersionCheck(NamedTuple):
-    version: Version
+    #: None when Docmost did not report its version.
+    version: Version | None
     tested: bool
 
 
 def check_version(text: str) -> VersionCheck:
-    """Refuse versions below the minimum; report whether the version was tested."""
+    """Refuse versions below the minimum; report whether the version was tested.
+
+    Docmost's version endpoint answers with an empty body when its own request
+    to the GitHub API fails (for example when rate limited), so a missing
+    version is reported as unknown instead of refusing the member.
+    """
+    if not text.strip():
+        return VersionCheck(version=None, tested=False)
     version = parse_version(text)
     if version < MIN_SUPPORTED:
         raise UnsupportedDocmostVersionError(
