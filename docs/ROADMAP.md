@@ -54,9 +54,10 @@ Scope:
   implementation over `httpx`: login, current user, spaces, pages
   (info, tree, recent, children), search, comments, page create/update,
   move to Trash, restore.
-- Version check at startup: below 0.70.0 refuses to start; newer than the
-  tested matrix logs a warning. Find and document the endpoint that reports
-  the version.
+- Version check: below 0.70.0 is refused; newer than the tested matrix logs
+  a warning. Docmost reports its version only to signed-in users, so the
+  server checks reachability at startup and the version at sign-in
+  (see `docs/docmost-api-notes.md`).
 - Typed errors: auth expired, forbidden, not found, Docmost unavailable,
   unsupported version. Timeouts and response size limits on every call.
 - Integration test harness: Docmost + Postgres + Redis in Docker, a seeded
@@ -81,7 +82,8 @@ Scope:
 - Encryption of Docmost tokens with a key from `SECRET_KEY` (envelope with key
   id, supports rotation via `SECRET_KEY_PREVIOUS`).
 - Login page: Member enters Docmost email and password, the server logs in to
-  Docmost, stores only the encrypted Docmost token. CSRF protection, generic
+  Docmost, checks the Docmost version, stores only the encrypted Docmost
+  token. CSRF protection, generic
   errors, no password in logs, rate limit per IP and per email.
 - Optional email allowlist (`ALLOWED_EMAILS`).
 - Account page: create, list and revoke personal bearer tokens with scopes
@@ -137,8 +139,9 @@ Done when:
 
 Scope:
 - Tools (scope `write`): create page (with Markdown body), update page body
-  (`append` / `prepend` / `replace`), rename/move page, add and resolve
-  comments.
+  (`append` / `prepend` / `replace`), rename/move page, add comments and
+  replies. Resolving comments is an Enterprise feature in Docmost and is out
+  of scope.
 - Tools (scope `delete`): move page to Trash, restore from Trash. No
   permanent delete.
 - Snapshot before every body write, in the server's Postgres; if the Snapshot

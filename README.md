@@ -25,8 +25,9 @@ Docmost rights.
 ## Supported Docmost versions
 
 Docmost Community Edition **0.70.0 or newer**. Older versions are refused at
-startup. The exact tested versions will be listed here once integration tests
-are in place.
+sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
+0.97.0; newer releases work in most cases and log a warning until they are
+added to the tested range.
 
 ## Security model
 
@@ -55,6 +56,8 @@ https. `PUBLIC_URL` must be an https URL; plain http is only accepted for
 | `PUBLIC_URL` | yes | | Public https URL of this server |
 | `DOCMOST_URL` | yes | | Base URL of your Docmost |
 | `DOCMOST_ALLOW_INSECURE_HTTP` | no | `false` | Allow an `http://` `DOCMOST_URL` on a trusted private network |
+| `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
+| `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
 | `DATABASE_URL` | no (yet) | | Postgres URL; becomes required with member sign-in |
 | `HOST` / `PORT` | no | `0.0.0.0` / `8000` | Listen address |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
@@ -66,6 +69,13 @@ uv sync
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pytest
+```
+
+Integration tests run against a real Docmost:
+
+```sh
+DOCMOST_VERSION=0.97.0 docker compose -f tests/integration/compose.yaml up -d
+DOCMOST_TEST_URL=http://localhost:3000 uv run pytest tests/integration
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

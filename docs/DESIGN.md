@@ -14,7 +14,7 @@ Open-source MCP server for the internet, behind a domain with authorization. Any
 | State | Postgres |
 | Docmost session expiry | Admin flag: re-login (default) or encrypted stored password |
 | Edition | CE only in v1; backend interface leaves a seam for EE |
-| Compatibility | Docmost version matrix; CI runs integration tests against real Docmost (latest and previous); startup version check warns |
+| Compatibility | Docmost version matrix; CI runs integration tests against real Docmost (oldest supported, previous, latest); reachability check at startup, version check at sign-in (Docmost reports its version only to signed-in users) |
 | Tools v1 | Read + write pages and comments; delete only to Trash (ADR 0004) |
 | Transport | Behind reverse proxy, https public URL mandatory; http Docmost URL only with explicit flag |
 
@@ -61,7 +61,7 @@ Checked: Docmost master 0.97.0 (clone of 2026-10-25), and the original `docmost-
 Decision: use `/api/pages/update` with `format=markdown` as the only write path. Drop the Yjs WebSocket client, and with it finding 10 (WebSocket size limit) and finding 6 (collab auth by cookie).
 
 Consequences:
-- **Minimum supported Docmost is 0.70.0.** Older versions are refused at startup by the version check.
+- **Minimum supported Docmost is 0.70.0.** Older versions are refused by the version check at sign-in.
 - **Silent no-op risk.** If Docmost is run with `COLLAB_DISABLE_REDIS` set, the collaboration gateway has no Redis sync extension and `handleYjsEvent` returns without doing anything, while the endpoint still answers 200. The server must read the page back after a write and fail the tool call if the body did not change. This check also applies after the Snapshot is taken.
 - Writes are applied with a delay: Hocuspocus persists with a debounce of 10 s (max 45 s). A read right after a write goes through `pages/info`, which reads from the database, so the read-back should poll for a bounded time or read through the Yjs state. To verify with an integration test.
 - `replace` deletes and re-inserts the whole fragment. Comment marks on replaced text are lost, and a Member who has the page open sees it change. Prefer `append`/`prepend` where the tool allows it, and say so in the tool description.

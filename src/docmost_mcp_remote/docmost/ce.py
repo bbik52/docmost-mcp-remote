@@ -1,0 +1,335 @@
+"""Docmost Community Edition backend over the internal HTTP API.
+
+Every endpoint is ``POST /api/<path>`` with a JSON body. Successful answers
+are wrapped as ``{"data": ..., "success": true}``. The member's session token
+is sent as a bearer token.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from docmost_mcp_remote.docmost.errors import (
+    DocmostAuthError,
+    DocmostBadRequestError,
+    DocmostError,
+    DocmostForbiddenError,
+    DocmostNotFoundError,
+    DocmostResponseTooLargeError,
+    DocmostUnavailableError,
+)
+from docmost_mcp_remote.docmost.models import (
+    BodyOperation,
+    Comment,
+    CurrentUser,
+    Page,
+    PageSummary,
+    Paginated,
+    SearchHit,
+    Space,
+)
+from docmost_mcp_remote.docmost.prosemirror import text_to_doc
+from docmost_mcp_remote.docmost.version import VersionCheck, check_version
+
+logger = logging.getLogger(__name__)
+
+#: Docmost rejects larger page sizes.
+MAX_PAGE_SIZE = 100
+_DEFAULT_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+_DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+
+
+def _limit(value: int) -> int:
+    return max(1, min(value, MAX_PAGE_SIZE))
+
+
+def _error_message(payload: Any) -> str:
+    """Pick Docmost's own short message out of an error body."""
+    if isinstance(payload, dict):
+        message = payload.get("message")
+        if isinstance(message, list):
+            return "; ".join(str(part) for part in message)
+        if isinstance(message, str):
+            return message
+    return "no details"
+
+
+class CeDocmostClient:
+    """Server-wide client: owns the connection pool and creates member sessions."""
+
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        timeout: httpx.Timeout = _DEFAULT_TIMEOUT,
+        max_response_bytes: int = _DEFAULT_MAX_RESPONSE_BYTES,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._max_response_bytes = max_response_bytes
+        self._http = httpx.AsyncClient(
+            base_url=base_url.rstrip("/") + "/api",
+            timeout=timeout,
+            transport=transport,
+            follow_redirects=False,
+            headers={"accept": "application/json", "user-agent": "docmost-mcp-remote"},
+        )
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def check_reachable(self) -> None:
+        """Check that Docmost answers its public health endpoint."""
+        try:
+            response = await self._http.get("/health")
+        except httpx.HTTPError as exc:
+            raise DocmostUnavailableError(
+                f"Docmost is not reachable: {type(exc).__name__}"
+            ) from None
+        if response.status_code != 200:
+            raise DocmostUnavailableError(
+                f"Docmost health check answered HTTP {response.status_code}"
+            )
+
+    async def login(self, email: str, password: str) -> str:
+        reply = await self._send("auth/login", {"email": email, "password": password}, None)
+        token = reply.cookies.get("authToken")
+        if not token:
+            raise DocmostError("Docmost accepted the sign-in but returned no session token")
+        return token
+
+    def session(self, token: str) -> CeDocmostSession:
+        return CeDocmostSession(self, token)
+
+    async def call(self, path: str, body: dict[str, Any], token: str) -> Any:
+        """POST to ``/api/<path>`` and return the ``data`` member of the answer."""
+        payload = (await self._send(path, body, token)).json()
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        return payload
+
+    async def _send(self, path: str, body: dict[str, Any], token: str | None) -> _Reply:
+        headers = {"authorization": f"Bearer {token}"} if token else {}
+        request = self._http.build_request("POST", path, json=body, headers=headers)
+        try:
+            response = await self._http.send(request, stream=True)
+        except httpx.TimeoutException:
+            raise DocmostUnavailableError(f"Docmost timed out on {path}") from None
+        except httpx.HTTPError as exc:
+            raise DocmostUnavailableError(
+                f"Docmost is not reachable: {type(exc).__name__}"
+            ) from None
+        try:
+            content = await self._read_limited(response, path)
+        finally:
+            await response.aclose()
+        reply = _Reply(
+            status=response.status_code,
+            content_type=response.headers.get("content-type", ""),
+            cookies=dict(response.cookies),
+            content=content,
+        )
+        reply.raise_for_status(path)
+        return reply
+
+    async def _read_limited(self, response: httpx.Response, path: str) -> bytes:
+        declared = response.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > self._max_response_bytes:
+            raise DocmostResponseTooLargeError(f"Docmost response to {path} is too large")
+        chunks: list[bytes] = []
+        size = 0
+        try:
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > self._max_response_bytes:
+                    raise DocmostResponseTooLargeError(f"Docmost response to {path} is too large")
+                chunks.append(chunk)
+        except httpx.HTTPError as exc:
+            raise DocmostUnavailableError(
+                f"Docmost connection failed while reading {path}: {type(exc).__name__}"
+            ) from None
+        return b"".join(chunks)
+
+
+@dataclass(frozen=True, slots=True)
+class _Reply:
+    status: int
+    content_type: str
+    cookies: dict[str, str]
+    content: bytes
+
+    def json(self) -> Any:
+        if "application/json" not in self.content_type:
+            raise DocmostUnavailableError("Docmost answered with a non-JSON response")
+        try:
+            return json.loads(self.content)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise DocmostUnavailableError("Docmost answered with invalid JSON") from None
+
+    def raise_for_status(self, path: str) -> None:
+        if self.status < 400:
+            return
+        try:
+            message = _error_message(json.loads(self.content))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            message = "no details"
+        if self.status == 401:
+            raise DocmostAuthError(message)
+        if self.status == 403:
+            raise DocmostForbiddenError(message)
+        if self.status == 404:
+            raise DocmostNotFoundError(message)
+        if self.status in (400, 422):
+            raise DocmostBadRequestError(message)
+        if self.status == 429:
+            raise DocmostUnavailableError("Docmost is rate limiting requests, try again later")
+        raise DocmostUnavailableError(f"Docmost answered HTTP {self.status} on {path}")
+
+
+def _paginated[T](data: Any, items: list[T]) -> Paginated[T]:
+    meta = data.get("meta") or {} if isinstance(data, dict) else {}
+    return Paginated[T](
+        items=items,
+        next_cursor=meta.get("nextCursor"),
+        has_next_page=bool(meta.get("hasNextPage")),
+    )
+
+
+def _items(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, dict):
+        data = data.get("items", [])
+    return [item for item in data or [] if isinstance(item, dict)]
+
+
+class CeDocmostSession:
+    """One member's session; implements ``DocmostBackend``."""
+
+    def __init__(self, client: CeDocmostClient, token: str) -> None:
+        self._client = client
+        self._token = token
+
+    def __repr__(self) -> str:
+        return "CeDocmostSession(<token hidden>)"
+
+    async def _call(self, path: str, body: dict[str, Any]) -> Any:
+        return await self._client.call(path, body, self._token)
+
+    async def current_user(self) -> CurrentUser:
+        data = await self._call("users/me", {})
+        return CurrentUser.model_validate(data["user"])
+
+    async def version(self) -> VersionCheck:
+        data = await self._call("version", {})
+        return check_version(str(data.get("currentVersion", "")))
+
+    async def list_spaces(self, *, cursor: str | None = None, limit: int = 50) -> Paginated[Space]:
+        data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})
+        return _paginated(data, [Space.from_api(item) for item in _items(data)])
+
+    async def list_pages(
+        self,
+        space_id: str,
+        *,
+        parent_page_id: str | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Paginated[PageSummary]:
+        body: dict[str, Any] = {"spaceId": space_id, "limit": _limit(limit), "cursor": cursor}
+        if parent_page_id:
+            body["pageId"] = parent_page_id
+        data = await self._call("pages/sidebar-pages", body)
+        return _paginated(data, [PageSummary.model_validate(item) for item in _items(data)])
+
+    async def recent_pages(
+        self, *, space_id: str | None = None, cursor: str | None = None, limit: int = 20
+    ) -> Paginated[PageSummary]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("pages/recent", body)
+        return _paginated(data, [PageSummary.model_validate(item) for item in _items(data)])
+
+    async def get_page(self, page_id: str) -> Page:
+        data = await self._call("pages/info", {"pageId": page_id, "format": "markdown"})
+        return Page.from_api(data)
+
+    async def breadcrumbs(self, page_id: str) -> list[PageSummary]:
+        data = await self._call("pages/breadcrumbs", {"pageId": page_id})
+        return [PageSummary.model_validate(item) for item in _items(data)]
+
+    async def search(
+        self, query: str, *, space_id: str | None = None, limit: int = 20
+    ) -> list[SearchHit]:
+        body: dict[str, Any] = {"query": query, "limit": _limit(limit)}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("search", body)
+        return [SearchHit.from_api(item) for item in _items(data)][: _limit(limit)]
+
+    async def list_comments(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Comment]:
+        data = await self._call(
+            "comments", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Comment.from_api(item) for item in _items(data)])
+
+    async def create_page(
+        self,
+        space_id: str,
+        title: str,
+        *,
+        markdown: str = "",
+        parent_page_id: str | None = None,
+    ) -> Page:
+        body: dict[str, Any] = {"spaceId": space_id, "title": title}
+        if markdown:
+            body["content"] = markdown
+            body["format"] = "markdown"
+        if parent_page_id:
+            body["parentPageId"] = parent_page_id
+        data = await self._call("pages/create", body)
+        return Page.from_api(data)
+
+    async def update_page_body(self, page_id: str, markdown: str, operation: BodyOperation) -> None:
+        await self._call(
+            "pages/update",
+            {"pageId": page_id, "content": markdown, "operation": operation, "format": "markdown"},
+        )
+
+    async def rename_page(self, page_id: str, title: str) -> None:
+        await self._call("pages/update", {"pageId": page_id, "title": title})
+
+    async def move_page(self, page_id: str, *, parent_page_id: str | None, position: str) -> None:
+        await self._call(
+            "pages/move",
+            {"pageId": page_id, "parentPageId": parent_page_id, "position": position},
+        )
+
+    async def create_comment(
+        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+    ) -> Comment:
+        body: dict[str, Any] = {"pageId": page_id, "content": json.dumps(text_to_doc(text))}
+        if parent_comment_id:
+            body["parentCommentId"] = parent_comment_id
+        data = await self._call("comments/create", body)
+        return Comment.from_api(data)
+
+    async def list_trash(
+        self, space_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[PageSummary]:
+        data = await self._call(
+            "pages/trash", {"spaceId": space_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [PageSummary.model_validate(item) for item in _items(data)])
+
+    async def move_to_trash(self, page_id: str) -> None:
+        # Only ``pageId`` is sent: the server never asks Docmost for a permanent delete.
+        await self._call("pages/delete", {"pageId": page_id})
+
+    async def restore_from_trash(self, page_id: str) -> None:
+        await self._call("pages/restore", {"pageId": page_id})

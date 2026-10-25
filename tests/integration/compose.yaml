@@ -1,0 +1,33 @@
+# Docmost for integration tests. Not for production use.
+# DOCMOST_VERSION selects the image tag (default: latest).
+
+services:
+  docmost:
+    image: docmost/docmost:${DOCMOST_VERSION:-latest}
+    environment:
+      APP_URL: http://localhost:${DOCMOST_PORT:-3000}
+      APP_SECRET: integration-tests-only-not-a-secret-0123456789
+      DATABASE_URL: postgresql://docmost:docmost@db:5432/docmost?schema=public
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:${DOCMOST_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: docmost
+      POSTGRES_DB: docmost
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docmost -d docmost"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
