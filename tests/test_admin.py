@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from docmost_mcp_remote import admin
 from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.admin_store import AuditStore
-from docmost_mcp_remote.db.engine import create_engine
+from docmost_mcp_remote.db.engine import create_engine, head_revision
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store
 from tests.conftest import DATABASE_TEST_URL, SECRET
@@ -147,3 +147,8 @@ def test_rotate_key(env: pytest.MonkeyPatch) -> None:
         return new.decrypt(stored.token_ciphertext, context=str(member_id)), snapshot.content
 
     assert _with_engine(check) == ("docmost-token", "body")
+
+
+def test_migrate(env: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    assert admin.main(["migrate"]) == 0
+    assert f"revision {head_revision()}, the latest" in capsys.readouterr().out

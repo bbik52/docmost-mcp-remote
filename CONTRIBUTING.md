@@ -12,6 +12,9 @@ Thanks for your interest. Issues and pull requests are welcome.
 - Security-relevant changes need tests. Never log passwords, tokens, page
   content or tool arguments.
 - Larger design changes start with an issue or an ADR in `docs/adr/`.
+- Database changes come with an Alembic migration in the same pull request
+  and follow "Database migrations" in [docs/DESIGN.md](docs/DESIGN.md):
+  never edit a released migration, keep existing data.
 
 ## Setup
 

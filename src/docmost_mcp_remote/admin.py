@@ -18,7 +18,12 @@ from pydantic import ValidationError
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.admin_store import AdminStore, AuditStore
-from docmost_mcp_remote.db.engine import create_engine, migrate
+from docmost_mcp_remote.db.engine import (
+    SchemaError,
+    create_engine,
+    current_revision,
+    migrate,
+)
 
 
 def _time(value: datetime | None) -> str:
@@ -37,6 +42,7 @@ def _table(rows: list[list[str]], header: list[str]) -> str:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="docmost-mcp-remote admin")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("migrate", help="bring the database schema up to date and show it")
     commands.add_parser("members", help="list members")
     grants = commands.add_parser("grants", help="list the active grants of a member")
     grants.add_argument("email")
@@ -62,10 +68,17 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _run(settings: Settings, args: argparse.Namespace) -> int:
     database_url = settings.database_url.get_secret_value()
-    await migrate(database_url)
+    try:
+        await migrate(database_url)
+    except SchemaError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     engine = create_engine(database_url)
     store = AdminStore(engine)
     try:
+        if args.command == "migrate":
+            print(f"Database schema is at revision {await current_revision(engine)}, the latest.")
+            return 0
         if args.command == "members":
             rows = [
                 [

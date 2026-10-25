@@ -290,6 +290,7 @@ The `admin` command runs where the server runs, with the same environment:
 
 ```sh
 docker compose exec server docmost-mcp-remote admin members
+docker compose exec server docmost-mcp-remote admin migrate
 docker compose exec server docmost-mcp-remote admin grants anna@example.com
 docker compose exec server docmost-mcp-remote admin revoke-grant <grant id>
 docker compose exec server docmost-mcp-remote admin revoke-member anna@example.com
@@ -306,9 +307,37 @@ To rotate `SECRET_KEY`: set the old value as `SECRET_KEY_PREVIOUS` and a new
 `SECRET_KEY`, restart, run `admin rotate-key`, then remove
 `SECRET_KEY_PREVIOUS` and restart again.
 
-To upgrade, run `docker compose pull && docker compose up -d`. The image tag
-`1` follows 1.x releases; set `IMAGE_TAG` in `.env` to pin a version. See the
-[changelog](https://github.com/bbik52/docmost-mcp-remote/blob/master/CHANGELOG.md).
+## Upgrading
+
+1. Read the [changelog](https://github.com/bbik52/docmost-mcp-remote/blob/master/CHANGELOG.md)
+   for "Upgrade notes".
+2. Back up the database:
+
+   ```sh
+   docker compose exec -T postgres pg_dump -U docmost_mcp -Fc docmost_mcp > docmost-mcp-$(date +%F).dump
+   ```
+
+3. Pull the new image and restart:
+
+   ```sh
+   docker compose pull && docker compose up -d
+   ```
+
+The server upgrades its database schema at startup, in one transaction and
+one process at a time, so a failed upgrade leaves the old schema in place.
+`docker compose exec server docmost-mcp-remote admin migrate` shows the
+schema revision.
+
+The image tag `1` follows 1.x releases; set `IMAGE_TAG` in `.env` to pin a
+version. Going back to an older version after its schema was upgraded is not
+supported: an older server refuses to start on a newer schema. To roll back,
+restore the backup with the old image:
+
+```sh
+docker compose stop server
+docker compose exec -T postgres pg_restore -U docmost_mcp -d docmost_mcp --clean --if-exists < docmost-mcp-2026-01-31.dump
+IMAGE_TAG=1.0.0 docker compose up -d
+```
 
 ## Configuration
 
