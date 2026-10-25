@@ -7,8 +7,8 @@ Cursor read and edit the wiki on behalf of each member, with that member's own
 Docmost rights.
 
 > **Status: pre-alpha.** Members can connect OAuth clients or personal tokens
-> and read their Docmost through the tools below. Writing is next; see the
-> [roadmap](docs/ROADMAP.md).
+> and read and edit their Docmost through the tools below. Security hardening
+> and the 1.0.0 release are next; see the [roadmap](docs/ROADMAP.md).
 
 ## Tools
 
@@ -21,9 +21,27 @@ Docmost rights.
 | `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
 | `search` | read | Full-text search with snippets |
 | `list_comments` | read | Comments and replies on a page |
+| `list_trash` | read | Pages in the Trash of a space |
+| `list_snapshots` | read | Snapshots this server saved before your changes to a page |
+| `create_page` | write | New page with a Markdown body, optionally under a parent |
+| `update_page` | write | Append, prepend or replace a page body with Markdown |
+| `rename_page` | write | Change a page title |
+| `move_page` | write | Move a page within its space, to the start, the end or after a sibling |
+| `add_comment` | write | Comment on a page or reply to a comment |
+| `restore_snapshot` | write | Put a page body back to a snapshot |
+| `trash_page` | delete | Move a page to the Trash |
+| `restore_page` | delete | Restore a page from the Trash |
 
 Page bodies, comments and snippets are returned inside a
 `<docmost-untrusted-content>` envelope so the model treats them as data.
+
+Before every body change the server saves the current body as a snapshot in
+its own database, encrypted, for `SNAPSHOT_RETENTION_DAYS`; if the snapshot
+cannot be saved, nothing is written. After the change it reads the page back
+and reports an error if Docmost did not apply it (this happens when Docmost
+runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
+were later deleted in Docmost until they expire. Pages are never deleted
+permanently.
 
 ## What it will do
 
@@ -120,6 +138,7 @@ Connected apps and tokens can be revoked on the account page.
 | `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
 | `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
+| `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |

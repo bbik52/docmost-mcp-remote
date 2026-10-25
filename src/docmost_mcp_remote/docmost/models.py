@@ -73,6 +73,7 @@ class Page(_PageBase):
     content: str = ""
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
+    deleted_at: datetime | None = Field(default=None, alias="deletedAt")
     creator: UserRef | None = None
     last_updated_by: UserRef | None = Field(default=None, alias="lastUpdatedBy")
     space: SpaceRef | None = None

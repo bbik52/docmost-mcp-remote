@@ -66,6 +66,12 @@ class Settings(BaseSettings):
         le=1_000_000,
         description="Longest page body returned to a client; longer bodies are truncated.",
     )
+    snapshot_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=3650,
+        description="Days a snapshot of a page body is kept before it is deleted.",
+    )
     relogin_mode: Literal["ask", "stored_password"] = Field(
         default="ask",
         description="On an expired Docmost session: ask the member to sign in again, or sign "

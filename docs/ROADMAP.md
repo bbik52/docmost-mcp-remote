@@ -7,19 +7,19 @@ to `develop` that meets the phase's done criteria. A phase is only started
 after the previous one is merged. Releases are merged from `develop` to
 `master` through a `release/*` branch and tagged on `master`.
 
-Versions: phases 1–3 are unreleased (`0.0.x`). The first public pre-release is
-`0.1.0` after phase 4. `1.0.0` is cut at the end of phase 8.
+Versions: there are no pre-releases. Phases 1–7 accumulate on `develop`; the
+first published version is `1.0.0`, cut at the end of phase 8.
 
-| # | Phase | Result | Release |
-|---|---|---|---|
-| 1 | Repository skeleton and CI | Installable package, container, compose, green CI | – |
-| 2 | Docmost client and version check | Typed REST client for Docmost CE ≥ 0.70.0, integration tests against real Docmost | – |
-| 3 | Members, Postgres and bearer tokens | Members sign in with their Docmost account, get a personal bearer token | – |
-| 4 | Read tools | First useful server: read spaces, pages, comments, search | `0.1.0` |
-| 5 | OAuth 2.1 | Works as a remote connector in Claude.ai and other OAuth MCP clients | `0.2.0` |
-| 6 | Write tools | Create/update pages and comments, Snapshots, read-back, Trash | `0.3.0` |
-| 7 | Security hardening | Rate limits, audit log, revocation, Admin CLI, threat review | `0.4.0` |
-| 8 | Release | Docs, signed image, PyPI, MCP Registry | `1.0.0` |
+| # | Phase | Result |
+|---|---|---|
+| 1 | Repository skeleton and CI | Installable package, container, compose, green CI |
+| 2 | Docmost client and version check | Typed REST client for Docmost CE ≥ 0.70.0, integration tests against real Docmost |
+| 3 | Members, Postgres and bearer tokens | Members sign in with their Docmost account, get a personal bearer token |
+| 4 | Read tools | First useful server: read spaces, pages, comments, search |
+| 5 | OAuth 2.1 | Works as a remote connector in Claude.ai and other OAuth MCP clients |
+| 6 | Write tools | Create/update pages and comments, Snapshots, read-back, Trash |
+| 7 | Security hardening | Rate limits, audit log, revocation, Admin CLI, threat review |
+| 8 | Release `1.0.0` | Docs, signed image, PyPI, MCP Registry |
 
 ---
 
@@ -99,7 +99,7 @@ Done when:
 - Tests cover: wrong password, allowlist refusal, CSRF failure, token revoke,
   key rotation, expired Docmost session in both relogin modes.
 
-## Phase 4. Read tools → `0.1.0`
+## Phase 4. Read tools
 
 Scope:
 - Tools (scope `read`): list spaces, list/tree pages in a space, get a page
@@ -109,15 +109,13 @@ Scope:
   calls; truncation is reported to the model.
 - Admin space restriction (`ALLOWED_SPACES`) applied to every tool.
 - Tool descriptions and annotations (`readOnlyHint`) written from scratch.
-- First pre-release: image `ghcr.io/bbik52/docmost-mcp-remote:0.1.0`.
 
 Done when:
 - Every tool has unit tests and an integration test against real Docmost.
 - A Member using Claude Code with a bearer token can browse and search their
   Docmost, and sees only what their Docmost account can see.
-- Pre-release `0.1.0` image published from CI.
 
-## Phase 5. OAuth 2.1 → `0.2.0`
+## Phase 5. OAuth 2.1
 
 Scope:
 - Authorization server per the MCP authorization spec: protected resource
@@ -135,7 +133,7 @@ Done when:
 - Tests cover PKCE missing/wrong, redirect URI mismatch, wrong audience,
   expired access token, refresh reuse, revoked grant.
 
-## Phase 6. Write tools → `0.3.0`
+## Phase 6. Write tools
 
 Scope:
 - Tools (scope `write`): create page (with Markdown body), update page body
@@ -158,7 +156,7 @@ Done when:
   restore, the read-back failure path and Trash/restore.
 - Scope checks: a `read` grant cannot call any write or delete tool.
 
-## Phase 7. Security hardening → `0.4.0`
+## Phase 7. Security hardening
 
 Scope:
 - Per-Member rate limits and response size limits.
@@ -177,7 +175,7 @@ Done when:
   link to the code or test, or explicitly deferred with a reason.
 - Log-redaction tests pass; rate limit tests pass.
 
-## Phase 8. Release → `1.0.0`
+## Phase 8. Release `1.0.0`
 
 Scope:
 - README: what it is, supported Docmost versions, security model, copy-paste

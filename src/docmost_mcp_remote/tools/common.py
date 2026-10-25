@@ -9,6 +9,7 @@ from fastmcp.exceptions import ToolError
 
 from docmost_mcp_remote.auth import current_member_id
 from docmost_mcp_remote.docmost import DocmostBackend, DocmostError
+from docmost_mcp_remote.docmost.models import Page
 from docmost_mcp_remote.members import MemberService, SessionExpiredError
 
 logger = logging.getLogger(__name__)
@@ -25,3 +26,10 @@ async def as_member[T](
     except DocmostError as exc:
         # Docmost error messages are short and contain no secrets or content.
         raise ToolError(f"Docmost: {exc}") from None
+
+
+def page_link(docmost_base: str, page: Page) -> str | None:
+    """The page's address in the Docmost web app."""
+    if page.space is None or not page.space.slug:
+        return None
+    return f"{docmost_base}/s/{page.space.slug}/p/{page.slug_id}"
