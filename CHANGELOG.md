@@ -12,6 +12,8 @@ when upgrading lists it under "Upgrade notes".
 - README: badges, a diagram of how the server fits between AI clients and
   Docmost, and screenshots of the consent and account pages.
 - Dependabot opens its pull requests against `develop`.
+- README.ru.md is now a full translation of README.md, and both link to
+  each other at the top.
 
 ## [1.0.1] - 2026-10-25
 
