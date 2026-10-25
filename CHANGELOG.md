@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-25
+
 First release.
 
 ### Added
