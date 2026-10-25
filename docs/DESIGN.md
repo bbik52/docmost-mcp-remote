@@ -78,6 +78,38 @@ The license is Apache 2.0 (ADR 0006). As the project gains users and contributor
   users can tell them apart; the README says so. "Docmost" is a name of the
   Docmost project; this project only describes compatibility with it.
 
+## Database migrations
+The server's own Postgres schema is managed with Alembic
+(`src/docmost_mcp_remote/db/migrations/`).
+
+- **Applied at startup.** The server, and every `admin` command, upgrades the
+  schema to the newest revision before it serves anything. Admins do nothing
+  extra on upgrade; `admin migrate` does the same step on its own and shows
+  the revision.
+- **One migrator at a time.** The upgrade runs in one transaction under a
+  Postgres advisory lock, so several replicas or a replica and an `admin`
+  command starting together wait for each other, and a failed migration
+  leaves the schema as it was.
+- **No silent downgrade.** A server that finds a revision it does not know
+  (the database was upgraded by a newer version) refuses to start instead
+  of running against a schema it does not understand.
+- **Forward only in production.** Migrations have `downgrade()` functions for
+  development and tests, but going back to an older version means restoring
+  the backup taken before the upgrade. The README asks for a backup before
+  every upgrade.
+- **Rules for changes.** Every schema change ships a migration in the same
+  pull request (`tests/test_migrations.py` fails when `schema.py` and the
+  migrations disagree). A released migration is never edited; fixes go into
+  a new one. Migrations keep existing data: a renamed or reshaped column is
+  copied over in the migration, not dropped. A test upgrades from every
+  revision to the newest one with data in place. A release whose
+  migrations take long or need care says so in the changelog under
+  "Upgrade notes".
+- **Within a major version** the schema only grows in ways the previous
+  minor release can survive for the few seconds of a rolling restart (new
+  tables, new nullable columns). Changes that would break a running older
+  version wait for a major release.
+
 ## Open questions
 1. ~~Snapshot storage and retention.~~ Resolved, see "Snapshots" below.
 2. ~~How to update page bodies in CE without the temp-page trick.~~ Resolved, see "Page body updates" below.

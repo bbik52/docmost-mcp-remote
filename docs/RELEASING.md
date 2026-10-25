@@ -36,13 +36,16 @@ Release artifacts are not signed yet (ADR 0006).
 2. Set the version in `pyproject.toml` and in `server.json` (`version`, the
    PyPI package `version` and the image tag in the OCI `identifier`), then
    run `uv lock`.
-3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
+3. If the release adds migrations, check that `tests/test_migrations.py`
+   passes and add "Upgrade notes" to the changelog when a migration is slow
+   or needs the Admin to do something.
+4. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
    and add a new empty `## [Unreleased]` above it.
-4. `uv run pytest tests/test_release_metadata.py` checks that these files
+5. `uv run pytest tests/test_release_metadata.py` checks that these files
    agree.
-5. Open a pull request from `release/X.Y.Z` to `master`. When CI is green,
+6. Open a pull request from `release/X.Y.Z` to `master`. When CI is green,
    merge it with a merge commit.
-6. Tag the merge commit and push the tag:
+7. Tag the merge commit and push the tag:
 
    ```sh
    git checkout master && git pull
@@ -50,9 +53,9 @@ Release artifacts are not signed yet (ADR 0006).
    git push origin vX.Y.Z
    ```
 
-7. Watch the Release workflow. It refuses a tag that does not match the
+8. Watch the Release workflow. It refuses a tag that does not match the
    project version, is not on `master` or has no changelog entry.
-8. Merge `master` back into `develop`.
+9. Merge `master` back into `develop`.
 
 A failed job can be re-run from the Actions page; PyPI, ghcr.io and the
 registry do not accept the same version twice with different content, so a

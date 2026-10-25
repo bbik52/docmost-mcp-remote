@@ -2,9 +2,11 @@
 
 Docmost orders pages by a string key compared byte by byte. A key is an
 integer part (a head letter that encodes its length, then base-62 digits)
-followed by an optional fraction that never ends in ``0``; Docmost accepts
+followed by an optional fraction; Docmost accepts
 keys of 5 to 12 characters. This module only builds keys between two
-existing ones; it never parses page content.
+existing ones; it never parses page content. Docmost adds random digits to
+the keys it creates, so an existing key may end in ``0``; keys built here
+do not.
 """
 
 from __future__ import annotations
@@ -33,8 +35,6 @@ def _split(key: str) -> tuple[str, str]:
     length = _integer_length(key[0])
     integer, fraction = key[:length], key[length:]
     if len(integer) < length or any(char not in DIGITS for char in key[1:]):
-        raise PositionError(f"invalid position {key!r}")
-    if fraction.endswith("0"):
         raise PositionError(f"invalid position {key!r}")
     return integer, fraction
 
@@ -91,9 +91,17 @@ def _midpoint(low: str, high: str | None) -> str:
     high_digit = DIGITS.index(high[0]) if high else len(DIGITS)
     if high_digit - low_digit > 1:
         return DIGITS[(low_digit + high_digit + 1) // 2]
-    if high is not None and len(high) > 1:
+    if high is not None and _has_room(high[0], high):
         return high[0]
     return DIGITS[low_digit] + _midpoint(low[1:], None)
+
+
+def _has_room(key: str, high: str | None) -> bool:
+    """Whether some key of at least ``key``'s length sorts between ``key`` and ``high``.
+
+    Not when ``high`` is ``key`` followed by zeros only, as in ``a1`` and ``a10``.
+    """
+    return high is None or not high.startswith(key) or high[len(key) :].strip("0") != ""
 
 
 def _between(low: str | None, high: str | None) -> str:
@@ -116,7 +124,7 @@ def _between(low: str | None, high: str | None) -> str:
     if low_integer == high_integer:
         return low_integer + _midpoint(low_fraction, high_fraction)
     larger = _increment(low_integer)
-    if larger is not None and larger < high:
+    if larger is not None and larger < high and _has_room(larger, high):
         return larger
     return low_integer + _midpoint(low_fraction, None)
 
@@ -132,6 +140,6 @@ def position_between(low: str | None, high: str | None) -> str:
         else:
             # Any longer key with this prefix still sorts before ``high``.
             key += DIGITS[len(DIGITS) // 2]
-    if len(key) > MAX_LENGTH:
+    if len(key) > MAX_LENGTH or not (low or "") < key < (high or "~"):
         raise PositionError("no room for a position between these pages")
     return key

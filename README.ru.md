@@ -100,7 +100,21 @@ docker compose exec server docmost-mcp-remote admin audit --email anna@example.c
 ```
 
 Полный список команд и настроек: [README.md](README.md#administration).
-Обновление: `docker compose pull && docker compose up -d`.
+## Обновление
+
+Перед обновлением прочитайте «Upgrade notes» в [CHANGELOG.md](CHANGELOG.md) и
+сделайте резервную копию базы:
+
+```sh
+docker compose exec -T postgres pg_dump -U docmost_mcp -Fc docmost_mcp > docmost-mcp-$(date +%F).dump
+docker compose pull && docker compose up -d
+```
+
+Сервер сам обновляет схему базы при старте: одной транзакцией и только один
+процесс одновременно, так что неудачная миграция оставляет старую схему.
+Откатиться на старую версию после обновления схемы можно только через
+восстановление резервной копии: старый сервер на новой схеме не запустится.
+Подробности в [README.md](README.md#upgrading).
 
 ## Лицензия
 

@@ -2,7 +2,8 @@
 
 All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[semantic versioning](https://semver.org/).
+[semantic versioning](https://semver.org/). A release that needs attention
+when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
@@ -34,5 +35,7 @@ First release.
   calls without content (`AUDIT_RETENTION_DAYS`).
 - `admin` command line: list members and grants, revoke grants or members,
   disable members, read the audit log, rotate `SECRET_KEY`.
+- Database schema migrations applied at startup under a lock; an older
+  server refuses to start on a schema upgraded by a newer one.
 - Container image for linux/amd64 and linux/arm64, `compose.yaml` with
   Postgres, and a PyPI package.
