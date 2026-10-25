@@ -7,11 +7,15 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-25
+
 ### Changed
 
 - README: badges, a diagram of how the server fits between AI clients and
   Docmost, and screenshots of the consent and account pages.
-- Dependabot opens its pull requests against `develop`.
+- Dependabot opens its pull requests against `develop`; the CI and release
+  workflows use `actions/checkout` v7.
+- SECURITY.md states the supported versions without naming a release number.
 - README.ru.md is now a full translation of README.md, and both link to
   each other at the top.
 
