@@ -1,0 +1,71 @@
+[project]
+name = "docmost-mcp-remote"
+version = "0.0.1"
+description = "Remote MCP server for Docmost Community Edition, with per-member sign-in, OAuth 2.1 and scoped access."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "bbik52" }]
+keywords = ["mcp", "mcp-server", "docmost", "model-context-protocol", "oauth", "wiki"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+dependencies = [
+    "fastmcp>=4.1.3,<5",
+    "pydantic-settings>=2.16,<3",
+    "uvicorn[standard]>=0.54,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/bbik52/docmost-mcp-remote"
+Issues = "https://github.com/bbik52/docmost-mcp-remote/issues"
+Security = "https://github.com/bbik52/docmost-mcp-remote/security/policy"
+
+[project.scripts]
+docmost-mcp-remote = "docmost_mcp_remote.__main__:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.18",
+    "pip-audit>=2.9",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docmost_mcp_remote"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF", "ASYNC", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
