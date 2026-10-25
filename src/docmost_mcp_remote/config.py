@@ -72,6 +72,18 @@ class Settings(BaseSettings):
         le=3650,
         description="Days a snapshot of a page body is kept before it is deleted.",
     )
+    audit_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        description="Days an audit log entry is kept before it is deleted.",
+    )
+    tool_calls_per_minute: int = Field(
+        default=60,
+        ge=1,
+        le=10_000,
+        description="Tool calls one member may make per minute, over all their clients.",
+    )
     relogin_mode: Literal["ask", "stored_password"] = Field(
         default="ask",
         description="On an expired Docmost session: ask the member to sign in again, or sign "

@@ -82,7 +82,9 @@ the same account page.
 
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
-member granted, so grant `write` and `delete` only to clients you trust. See
+member granted, so grant `write` and `delete` only to clients you trust.
+Tool calls are limited per member and recorded in an audit log. See
+[docs/security-model.md](docs/security-model.md) for the threat model,
 [SECURITY.md](SECURITY.md) for how to report a vulnerability and
 [docs/DESIGN.md](docs/DESIGN.md) for the design.
 
@@ -125,6 +127,28 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 
 Connected apps and tokens can be revoked on the account page.
 
+### Administration
+
+The `admin` command runs where the server runs, with the same environment:
+
+```sh
+docker compose exec server docmost-mcp-remote admin members
+docker compose exec server docmost-mcp-remote admin grants anna@example.com
+docker compose exec server docmost-mcp-remote admin revoke-grant <grant id>
+docker compose exec server docmost-mcp-remote admin revoke-member anna@example.com
+docker compose exec server docmost-mcp-remote admin disable-member anna@example.com
+docker compose exec server docmost-mcp-remote admin audit --email anna@example.com
+```
+
+`revoke-member` revokes every grant of the member and drops their stored
+Docmost session; `disable-member` blocks them until `enable-member`. Every
+tool call is recorded in the audit log with the tool, the page or space id
+and the outcome, never with content or arguments.
+
+To rotate `SECRET_KEY`: set the old value as `SECRET_KEY_PREVIOUS` and a new
+`SECRET_KEY`, restart, run `admin rotate-key`, then remove
+`SECRET_KEY_PREVIOUS` and restart again.
+
 ### Configuration
 
 | Variable | Required | Default | Meaning |
@@ -139,6 +163,8 @@ Connected apps and tokens can be revoked on the account page.
 | `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
+| `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |
+| `TOOL_CALLS_PER_MINUTE` | no | `60` | Tool calls one member may make per minute, over all their clients |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
@@ -169,6 +195,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE). This project is an independent implementation and is not
-affiliated with Docmost. It was inspired by
+[Apache License 2.0](LICENSE). The license does not cover the project name:
+forks are welcome under another name. This project is an independent
+implementation and is not affiliated with Docmost. It was inspired by
 [docmost-mcp-oss](https://github.com/abelsr/docmost-mcp-oss).

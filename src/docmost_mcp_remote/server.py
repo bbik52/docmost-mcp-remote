@@ -20,11 +20,13 @@ from starlette.responses import JSONResponse, Response
 from docmost_mcp_remote import __version__
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.crypto import Cipher
+from docmost_mcp_remote.db.admin_store import AuditStore
 from docmost_mcp_remote.db.engine import create_engine, migrate
 from docmost_mcp_remote.db.oauth_store import OAuthStore
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store
 from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostError
+from docmost_mcp_remote.guard import ToolGuard
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.oauth import DocmostOAuthProvider
 from docmost_mcp_remote.tools import account, read, write
@@ -45,14 +47,15 @@ INSTRUCTIONS = (
 
 
 async def _cleanup_periodically(
-    oauth: OAuthStore, snapshots: SnapshotStore, retention: timedelta
+    settings: Settings, oauth: OAuthStore, snapshots: SnapshotStore, audit: AuditStore
 ) -> None:
     while True:
         try:
             await oauth.cleanup()
-            deleted = await snapshots.cleanup(retention)
+            deleted = await snapshots.cleanup(timedelta(days=settings.snapshot_retention_days))
             if deleted:
-                logger.info("Deleted %d snapshots older than %s", deleted, retention)
+                logger.info("Deleted %d expired snapshots", deleted)
+            await audit.cleanup(timedelta(days=settings.audit_retention_days))
         except Exception:
             logger.exception("Cleanup of expired data failed")
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
@@ -84,6 +87,7 @@ def create_server(
     )
     members = MemberService(settings, store, client, cipher)
     snapshots = SnapshotStore(db, cipher)
+    audit = AuditStore(db)
 
     @asynccontextmanager
     async def lifespan(_: FastMCP[Any]) -> AsyncIterator[dict[str, Any]]:
@@ -95,8 +99,7 @@ def create_server(
             logger.warning("Docmost is not reachable at startup: %s", exc)
         else:
             logger.info("Docmost is reachable")
-        retention = timedelta(days=settings.snapshot_retention_days)
-        cleanup = asyncio.create_task(_cleanup_periodically(oauth, snapshots, retention))
+        cleanup = asyncio.create_task(_cleanup_periodically(settings, oauth, snapshots, audit))
         try:
             yield {}
         finally:
@@ -116,6 +119,7 @@ def create_server(
         mask_error_details=True,
         lifespan=lifespan,
     )
+    mcp.add_middleware(ToolGuard(audit, settings.tool_calls_per_minute))
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(_: Request) -> Response:

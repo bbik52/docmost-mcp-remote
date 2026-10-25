@@ -161,6 +161,7 @@ class FakeDocmost:
             {
                 "/api/spaces": ok({"items": SPACES, "meta": {"hasNextPage": False}}),
                 "/api/pages/info": info,
+                "/api/pages/breadcrumbs": ok([]),
                 "/api/pages/create": create,
                 "/api/pages/update": update_page,
                 "/api/pages/sidebar-pages": sidebar,

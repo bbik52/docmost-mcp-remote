@@ -32,7 +32,7 @@ class Snapshot:
     content: str
 
 
-def _context(snapshot_id: uuid.UUID, member_id: uuid.UUID) -> str:
+def snapshot_context(snapshot_id: uuid.UUID, member_id: uuid.UUID) -> str:
     return f"snapshot:{snapshot_id}:{member_id}"
 
 
@@ -62,7 +62,7 @@ class SnapshotStore:
                     space_id=space_id,
                     reason=reason,
                     ciphertext=self._cipher.encrypt(
-                        plaintext, context=_context(snapshot_id, member_id)
+                        plaintext, context=snapshot_context(snapshot_id, member_id)
                     ),
                     content_chars=len(content),
                 )
@@ -98,7 +98,7 @@ class SnapshotStore:
         if row is None:
             return None
         data = json.loads(
-            self._cipher.decrypt(row.ciphertext, context=_context(row.id, row.member_id))
+            self._cipher.decrypt(row.ciphertext, context=snapshot_context(row.id, row.member_id))
         )
         info = SnapshotInfo(
             id=row.id,

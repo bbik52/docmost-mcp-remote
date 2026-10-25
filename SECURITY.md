@@ -37,4 +37,5 @@ project), in MCP clients, or in a reverse proxy you put in front of the server.
   limit the damage.
 - Logs never contain passwords, tokens, page content or tool arguments.
 
-Details are in [docs/DESIGN.md](docs/DESIGN.md).
+Details are in [docs/security-model.md](docs/security-model.md) and
+[docs/DESIGN.md](docs/DESIGN.md).

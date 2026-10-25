@@ -19,7 +19,7 @@ first published version is `1.0.0`, cut at the end of phase 8.
 | 5 | OAuth 2.1 | Works as a remote connector in Claude.ai and other OAuth MCP clients |
 | 6 | Write tools | Create/update pages and comments, Snapshots, read-back, Trash |
 | 7 | Security hardening | Rate limits, audit log, revocation, Admin CLI, threat review |
-| 8 | Release `1.0.0` | Docs, signed image, PyPI, MCP Registry |
+| 8 | Release `1.0.0` | Docs, image, PyPI, MCP Registry |
 
 ---
 
@@ -35,7 +35,7 @@ Scope:
 - `Dockerfile` (non-root, slim base, pinned by `uv.lock`), `compose.yaml`
   (server + Postgres, named volume, `${VAR:?...}` for required values),
   `.env.example`.
-- `LICENSE` (MIT), `README.md`, `SECURITY.md`, `CONTRIBUTING.md`.
+- `LICENSE` (Apache 2.0 since ADR 0006), `README.md`, `SECURITY.md`, `CONTRIBUTING.md`.
 - CI on GitHub Actions: `ruff check`, `ruff format --check`, `mypy`, `pytest`,
   `pip-audit` on the locked dependencies, Docker build. Dependabot for pip,
   Actions and Docker.
@@ -181,9 +181,9 @@ Scope:
 - README: what it is, supported Docmost versions, security model, copy-paste
   `compose.yaml`, reverse-proxy section, client setup (Claude.ai, Claude Code,
   Cursor), configuration reference.
-- Release workflow on tag: multi-arch image to `ghcr.io` with provenance and
-  signature (cosign), package to PyPI via trusted publishing, GitHub release
-  with changelog.
+- Release workflow on tag: multi-arch image to `ghcr.io`, package to PyPI via
+  trusted publishing, GitHub release with changelog. Signing the image and
+  DCO sign-offs are deferred (ADR 0006).
 - `server.json` and `mcp-name:` line; publish to the official MCP Registry as
   `io.github.bbik52/docmost-mcp-remote`.
 - GitHub topics and description; `README.ru.md`.
