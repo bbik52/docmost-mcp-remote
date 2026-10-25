@@ -62,13 +62,19 @@ CI run. Nothing here is copied from Docmost or from other clients.
 - `pages/recent` lists recently updated pages, optionally in one space.
 - `pages/move` needs `parentPageId` (or `null` for root) and a `position`:
   a fractional-index key, 5–12 characters, validated by Docmost
-  (`Invalid move position` otherwise).
+  (`Invalid move position` otherwise). Existing keys look like `a01bz` or
+  `a17AT`: an integer part whose first letter encodes its length (`a` = two
+  characters), a base-62 fraction, and siblings sorted by plain byte order.
+  The server builds keys between neighbours itself
+  (`docmost/positions.py`).
 
 ## Trash
 
 - `pages/delete` with only `pageId` moves the page to Trash. The endpoint
   also has a permanent-delete option; this server never sends it.
 - `pages/trash` lists trashed pages of a space; `pages/restore` restores one.
+- A trashed page is still returned by `pages/info`, with `deletedAt` set,
+  and drops out of `pages/sidebar-pages`.
 
 ## Comments
 

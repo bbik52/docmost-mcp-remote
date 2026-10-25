@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
     MetaData,
     String,
@@ -160,3 +161,27 @@ oauth_codes = Table(
     Column("expires_at", DateTime(timezone=True), nullable=False),
     Column("used_at", DateTime(timezone=True)),
 )
+
+#: Page bodies saved before every body write, encrypted, kept for SNAPSHOT_RETENTION_DAYS.
+snapshots = Table(
+    "snapshots",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "member_id",
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("page_id", String(64), nullable=False),
+    Column("space_id", String(64), nullable=False),
+    #: The tool call that caused the write, for example ``update_page:replace``.
+    Column("reason", String(64), nullable=False),
+    #: Title and body, encrypted together with the snapshot id as context.
+    Column("ciphertext", LargeBinary, nullable=False),
+    Column("content_chars", Integer, nullable=False),
+    _now(),
+)
+
+Index("ix_snapshots_page_id_created_at", snapshots.c.page_id, snapshots.c.created_at)
+Index("ix_snapshots_created_at", snapshots.c.created_at)

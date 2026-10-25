@@ -11,9 +11,9 @@ from pydantic import Field
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
-from docmost_mcp_remote.docmost.models import Page, PageSummary
+from docmost_mcp_remote.docmost.models import PageSummary
 from docmost_mcp_remote.members import MemberService
-from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.common import as_member, page_link
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, truncate, wrap
 
@@ -53,11 +53,6 @@ def _summary(page: PageSummary) -> dict[str, Any]:
 def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     policy = SpacePolicy(settings.allowed_spaces)
     docmost_base = str(settings.docmost_url).rstrip("/")
-
-    def page_url(page: Page) -> str | None:
-        if page.space is None or not page.space.slug:
-            return None
-        return f"{docmost_base}/s/{page.space.slug}/p/{page.slug_id}"
 
     @mcp.tool(
         name="list_spaces",
@@ -167,12 +162,13 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "space": found.space.model_dump() if found.space else {"id": found.space_id},
                 "path": [item.title or "(untitled)" for item in trail[:-1]],
                 "parent_page_id": found.parent_page_id,
-                "url": page_url(found),
+                "url": page_link(docmost_base, found),
                 "created_at": found.created_at.isoformat() if found.created_at else None,
                 "updated_at": found.updated_at.isoformat() if found.updated_at else None,
                 "created_by": found.creator.name if found.creator else None,
                 "last_updated_by": found.last_updated_by.name if found.last_updated_by else None,
                 "you_can_edit": found.can_edit,
+                "in_trash": found.deleted_at is not None,
                 "notice": NOTICE,
                 "content": wrap(body, source=f"page {found.id}"),
                 "content_chars": len(found.content),

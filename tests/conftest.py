@@ -83,7 +83,7 @@ async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
         await connection.execute(
             text(
                 "TRUNCATE members, docmost_sessions, grants, tokens, oauth_clients, "
-                "oauth_requests, oauth_codes RESTART IDENTITY CASCADE"
+                "oauth_requests, oauth_codes, snapshots RESTART IDENTITY CASCADE"
             )
         )
     try:
