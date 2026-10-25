@@ -1,5 +1,12 @@
 # docmost-mcp-remote
 
+[![CI](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/bbik52/docmost-mcp-remote/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
+[![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
+[![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#supported-docmost-versions)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/bbik52/docmost-mcp-remote/blob/master/LICENSE)
+
 A self-hosted remote [MCP](https://modelcontextprotocol.io) server for
 [Docmost](https://docmost.com) Community Edition. Run it next to your Docmost,
 put it behind your domain, and let AI clients such as Claude, Claude Code,
@@ -18,6 +25,33 @@ member's own Docmost account and rights.
   permanently, and the server keeps an encrypted snapshot of a page body
   before every change.
 - **Self-hosted.** One container plus Postgres, with a ready `compose.yaml`.
+
+[Quick start](#quick-start) · [Connecting a client](#connecting-a-client) · [Tools](#tools) · [Security model](#security-model) · [Configuration](#configuration) · [Upgrading](#upgrading)
+
+## How it works
+
+```mermaid
+flowchart LR
+    member(["Member"]) -. "signs in once with<br/>their Docmost account" .-> server
+    client["AI client<br/>Claude, Cursor, VS Code"] -- "MCP over https<br/>OAuth 2.1 or personal token" --> server["docmost-mcp-remote"]
+    server -- "Docmost API,<br/>as that member" --> docmost["Docmost CE"]
+    server --- db[("Postgres<br/>sessions, snapshots,<br/>audit log")]
+```
+
+The first time a client connects, the member signs in with their Docmost
+email and password and picks what the client may do. They can see and revoke
+every connected app and token on their account page.
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/consent.png" alt="The consent page: allow Claude to use Docmost as you, with read, write and delete scopes"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/account.png" alt="The account page with connected apps, personal tokens and the form to create a token"></td>
+</tr>
+<tr>
+<td align="center">Choosing what a client may do</td>
+<td align="center">Connected apps and personal tokens</td>
+</tr>
+</table>
 
 ## Supported Docmost versions
 
@@ -203,7 +237,8 @@ mcp.example.com {
 }
 ```
 
-nginx:
+<details>
+<summary>nginx</summary>
 
 ```nginx
 server {
@@ -223,6 +258,8 @@ server {
     }
 }
 ```
+
+</details>
 
 The server uses `X-Forwarded-For` for its per-IP rate limits. The compose
 file publishes the port on 127.0.0.1 only and trusts the header from every
