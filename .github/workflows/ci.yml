@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_TEST_URL: postgresql://test:test@localhost:5432/test
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Audit locked runtime dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt
+          uv run pip-audit --strict --disable-pip --require-hashes -r requirements.txt
+
+  integration:
+    name: integration (Docmost ${{ matrix.docmost }})
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.canary }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported, previous and newest tested release. "latest" warns early
+        # when a new Docmost release is out and the tested range needs a bump.
+        docmost: ["0.70.3", "0.96.0", "0.97.0"]
+        canary: [false]
+        include:
+          - docmost: latest
+            canary: true
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U test" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      DOCMOST_VERSION: ${{ matrix.docmost }}
+      DOCMOST_TEST_URL: http://localhost:3000
+      DATABASE_TEST_URL: postgresql://test:test@localhost:5433/test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Start Docmost
+        run: docker compose -f tests/integration/compose.yaml up -d --wait --wait-timeout 180
+      - name: Wait for Docmost
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/api/health; then exit 0; fi
+            sleep 2
+          done
+          docker compose -f tests/integration/compose.yaml logs docmost
+          exit 1
+      - run: uv sync --locked
+      - run: uv run pytest tests/integration
+      - name: Docmost logs
+        if: failure()
+        run: docker compose -f tests/integration/compose.yaml logs docmost
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only/" .env
+          sed -i "s/^SECRET_KEY=$/SECRET_KEY=$(openssl rand -hex 32)/" .env
+          docker compose config --quiet
+      - name: Build the image
+        run: docker build -t ghcr.io/bbik52/docmost-mcp-remote:ci .
+      - name: Start the compose stack
+        run: IMAGE_TAG=ci docker compose up -d --wait --wait-timeout 120
+      - name: Smoke test
+        run: |
+          curl -fsS http://127.0.0.1:8000/healthz
+          curl -fsS -o /dev/null http://127.0.0.1:8000/login
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp)" = 401
+          curl -fsS http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp
+          docker compose exec -T server docmost-mcp-remote admin members
+          test "$(docker image inspect -f '{{index .Config.Labels "io.modelcontextprotocol.server.name"}}' ghcr.io/bbik52/docmost-mcp-remote:ci)" = io.github.bbik52/docmost-mcp-remote
+      - name: Logs
+        if: always()
+        run: docker compose logs

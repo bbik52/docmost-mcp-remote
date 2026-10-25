@@ -1,0 +1,56 @@
+# docmost-mcp-remote: the server and its Postgres.
+# Copy .env.example to .env and fill in the required values first, then put a
+# reverse proxy with https in front of port 8000.
+
+services:
+  server:
+    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.0.0 to pin one.
+    image: ghcr.io/bbik52/docmost-mcp-remote:${IMAGE_TAG:-1}
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL to the public https URL of this server}
+      DOCMOST_URL: ${DOCMOST_URL:?set DOCMOST_URL to the base URL of your Docmost}
+      DOCMOST_ALLOW_INSECURE_HTTP: ${DOCMOST_ALLOW_INSECURE_HTTP:-false}
+      DATABASE_URL: postgresql://docmost_mcp:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/docmost_mcp
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY to a random value of at least 32 characters}
+      SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ALLOWED_SPACES: ${ALLOWED_SPACES:-}
+      RELOGIN_MODE: ${RELOGIN_MODE:-ask}
+      SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
+      TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
+      MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
+      # The port is published on 127.0.0.1 only, so every client is a local proxy.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docmost_mcp
+      POSTGRES_DB: docmost_mcp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docmost_mcp -d docmost_mcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
