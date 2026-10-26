@@ -16,6 +16,7 @@ from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.schema import snapshots
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store, now
+from docmost_mcp_remote.docmost.prosemirror import text_to_doc
 from docmost_mcp_remote.tools import write
 from tests.conftest import SECRET
 from tests.fakes import Handler, Recorder, docmost_routes, error, ok
@@ -32,6 +33,7 @@ class FakeDocmost:
 
     def __init__(self) -> None:
         self.pages: dict[str, dict[str, Any]] = {}
+        self.history: dict[str, dict[str, Any]] = {}
         self.comments: dict[str, dict[str, Any]] = {
             "c1": self.comment("c1", "p1", "docmost-user-1", "Old text"),
             "c2": self.comment("c2", "p1", "someone-else", "Not mine"),
@@ -54,6 +56,18 @@ class FakeDocmost:
             "position": "a0VVV",
             "deletedAt": None,
             **extra,
+        }
+
+    def add_version(self, version_id: str, page_id: str, text: str) -> None:
+        self.history[version_id] = {
+            "id": version_id,
+            "pageId": page_id,
+            "spaceId": self.pages[page_id]["spaceId"],
+            "title": self.pages[page_id]["title"],
+            "createdAt": "2026-10-25T10:00:00Z",
+            "lastUpdatedBy": {"id": "u1", "name": "Anna"},
+            "contributors": [{"id": "u1", "name": "Anna"}],
+            "content": text_to_doc(text),
         }
 
     def comment(self, comment_id: str, page_id: str, creator_id: str, text: str) -> dict[str, Any]:
@@ -88,11 +102,27 @@ class FakeDocmost:
             return page if page and page["deletedAt"] is None else None
 
         def info(request: httpx.Request) -> httpx.Response:
-            page = live(body(request)["pageId"])
+            data = body(request)
+            page = live(data["pageId"])
             if page is None:
                 return error(404, "Page not found")
             space = next(space for space in SPACES if space["id"] == page["spaceId"])
+            if data.get("format") == "json":
+                return ok({**page, "space": space, "content": text_to_doc(page["content"])})
             return ok({**page, "space": space})
+
+        def history(request: httpx.Request) -> httpx.Response:
+            page_id = body(request)["pageId"]
+            items = [
+                {key: value for key, value in item.items() if key != "content"}
+                for item in self.history.values()
+                if item["pageId"] == page_id
+            ]
+            return ok({"items": items[::-1], "meta": {"hasNextPage": False}})
+
+        def history_info(request: httpx.Request) -> httpx.Response:
+            found = self.history.get(body(request)["historyId"])
+            return ok(found) if found else error(404, "Page history not found")
 
         def create(request: httpx.Request) -> httpx.Response:
             data = body(request)
@@ -213,6 +243,8 @@ class FakeDocmost:
             {
                 "/api/spaces": ok({"items": SPACES, "meta": {"hasNextPage": False}}),
                 "/api/pages/info": info,
+                "/api/pages/history": history,
+                "/api/pages/history/info": history_info,
                 "/api/pages/breadcrumbs": ok([]),
                 "/api/pages/create": create,
                 "/api/pages/update": update_page,

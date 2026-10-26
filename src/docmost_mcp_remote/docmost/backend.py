@@ -15,6 +15,8 @@ from docmost_mcp_remote.docmost.models import (
     Comment,
     CopiedPage,
     CurrentUser,
+    HistoryEntry,
+    HistoryVersion,
     Page,
     PageSummary,
     Paginated,
@@ -51,6 +53,16 @@ class DocmostBackend(Protocol):
     async def get_page(self, page_id: str) -> Page: ...
 
     async def breadcrumbs(self, page_id: str) -> list[PageSummary]: ...
+
+    async def get_page_document(self, page_id: str) -> str:
+        """The page body converted by this server from ProseMirror JSON to Markdown."""
+        ...
+
+    async def page_history(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 20
+    ) -> Paginated[HistoryEntry]: ...
+
+    async def history_version(self, history_id: str) -> HistoryVersion: ...
 
     async def search(
         self, query: str, *, space_id: str | None = None, limit: int = 20

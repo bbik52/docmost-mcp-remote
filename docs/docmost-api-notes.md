@@ -76,6 +76,21 @@ CI run. Nothing here is copied from Docmost or from other clients.
   child pages the member can access to the top level of the other space; the
   same space answers `400 Page is already in this space`.
 
+## Page history
+
+- Docmost saves a version of a page in the background, about a minute after
+  the last edit of a page younger than five minutes and about five minutes
+  after it for older pages, and only when the body changed.
+- `pages/history` with `pageId` lists versions, newest first, with
+  `lastUpdatedBy` and `contributors`, without bodies.
+- `pages/history/info` with `historyId` returns one version with its body as
+  ProseMirror JSON only; there is no Markdown option. The server converts it
+  (`doc_to_markdown`) and checks in the integration tests that the result
+  matches Docmost's own Markdown for common content.
+- `pages/info` with `format: "json"` returns the current body as
+  ProseMirror JSON, which lets the server diff it against a version with
+  the same conversion on both sides.
+
 ## Spaces
 
 - `spaces/info` with `spaceId` returns the space with `memberCount` and the
