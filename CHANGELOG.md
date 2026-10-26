@@ -21,6 +21,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Changed
 
+- README: screenshots show the `admin` scope; the download links, the
+  `WEB_SESSION_HOURS` setting and the Docmost version `list_attachments`
+  needs are documented.
 - Resource reads share the tool call rate limit and are written to the audit
   log as `read_resource`.
 
