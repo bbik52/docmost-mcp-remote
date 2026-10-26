@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
+import mcp_types as mt
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
@@ -21,6 +22,7 @@ from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import Invitation, InviteRole, WorkspaceRole
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.confirm import confirm
 from docmost_mcp_remote.tools.manage import _group, _group_ids, _person, _user_ids
 from docmost_mcp_remote.tools.read import Cursor, Limit
 
@@ -179,10 +181,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         emails: Annotated[list[Email], Field(min_length=1, max_length=MAX_INVITES)],
         role: Annotated[InviteRole, Field(description="member or admin.")] = "member",
         groups: Annotated[list[str] | None, Field(max_length=25)] = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
         wanted = list(dict.fromkeys(email.strip().lower() for email in emails))
 
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             group_ids = await _group_ids(backend, groups or [])
             already_members: list[str] = []
             already_invited: list[str] = []
@@ -196,6 +198,13 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 else:
                     invite.append(email)
             if invite:
+                into = f" and add them to {', '.join(groups or [])}" if groups else ""
+                asked = await confirm(
+                    f"Invite {', '.join(invite)} to the Docmost workspace as {role}{into}? "
+                    "Docmost emails each of them a link to join."
+                )
+                if isinstance(asked, mt.InputRequiredResult):
+                    return asked
                 await backend.invite(invite, role, group_ids)
             return {
                 "invited": invite,
@@ -250,9 +259,12 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     async def change_workspace_role(
         user: UserRef,
         role: Annotated[WorkspaceRole, Field(description="member, admin or owner.")],
-    ) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             user_id = await one_user(backend, user)
+            asked = await confirm(f"Make {user} {role} of the Docmost workspace?")
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.change_workspace_role(user_id, role)
             return {"user_id": user_id, "role": role}
 
@@ -268,9 +280,15 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         annotations=_ADMIN_ACCESS,
         auth=require_scopes("admin"),
     )
-    async def deactivate_member(user: UserRef) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    async def deactivate_member(user: UserRef) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             user_id = await one_user(backend, user)
+            asked = await confirm(
+                f"Deactivate {user} in Docmost? They are signed out and cannot sign in until "
+                "they are activated again."
+            )
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.set_member_active(user_id, False)
             return {"user_id": user_id, "deactivated": True}
 

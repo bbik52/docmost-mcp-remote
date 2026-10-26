@@ -148,6 +148,18 @@ and reports an error if Docmost did not apply it (this happens when Docmost
 runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
 were later deleted in Docmost until they expire.
 
+Risky changes ask you first, in your client, where the client supports it
+(MCP elicitation): moving a page to the Trash, giving people or groups a role
+in a space, inviting people, changing a workspace role and deactivating
+someone. The question goes to you, not to the model, so text in a page cannot
+answer it. Clients that cannot ask make these changes without the question,
+within the scopes you granted.
+
+A change that rewrites the whole body (a replace, a section, a JSON write, a
+restore) is refused while someone else is editing the page, that is when
+another person saved it in the last minute, because their typing would be
+lost. Appending and prepending merge with their edits and are not refused.
+
 ### Adding files
 
 Passing a file to the model costs tokens: as base64, about a million per
@@ -161,11 +173,6 @@ for `UPLOAD_RETENTION_MINUTES` and whatever was not added by then is deleted.
 `upload_attachment` takes the same place parameters.
 
 <img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/upload.png" width="560" alt="The upload page: a drop area, three images and a PDF with arrows to reorder them, and a Done button">
-
-A change that rewrites the whole body (a replace, a section, a JSON write, a
-restore) is refused while someone else is editing the page, that is when
-another person saved it in the last minute, because their typing would be
-lost. Appending and prepending merge with their edits and are not refused.
 
 ## Resources and prompts
 

@@ -13,6 +13,7 @@ import httpx
 import uvicorn
 from fastmcp import Client
 from fastmcp.client.auth import BearerAuth
+from fastmcp.client.elicitation import ElicitResult
 
 from docmost_mcp_remote.docmost import DocmostClient
 from docmost_mcp_remote.server import create_app
@@ -82,6 +83,36 @@ class RunningServer:
         async def run() -> Any:
             async with Client(f"{self.url}/mcp", auth=BearerAuth(token)) as client:
                 result = await client.call_tool(tool, arguments or {})
+                return result.structured_content
+
+        return asyncio.run(run())
+
+    def call_asked(
+        self,
+        token: str,
+        tool: str,
+        arguments: dict[str, Any],
+        *,
+        answer: bool,
+        asked: list[str],
+        mode: Any = "auto",
+    ) -> Any:
+        """Call a tool from a client that can ask its person; ``answer`` is their reply.
+
+        Each question shown is appended to ``asked``. ``mode`` "legacy" connects
+        with a handshake-era protocol version, where the server asks while the
+        call waits; "auto" uses the newest, where the client asks and retries.
+        """
+
+        async def reply(message: str, *_: Any) -> Any:
+            asked.append(message)
+            return {"confirm": True} if answer else ElicitResult(action="decline")
+
+        async def run() -> Any:
+            async with Client(
+                f"{self.url}/mcp", auth=BearerAuth(token), elicitation_handler=reply, mode=mode
+            ) as client:
+                result = await client.call_tool(tool, arguments)
                 return result.structured_content
 
         return asyncio.run(run())
