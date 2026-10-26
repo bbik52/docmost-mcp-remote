@@ -49,6 +49,11 @@ when upgrading lists it under "Upgrade notes".
 
 ### Changed
 
+- README, in English and Russian: highlights, a comparison with other Docmost
+  MCP servers, tools grouped and numbered, client setup in collapsible
+  sections, the safety features in one place, and the diagram as an image so
+  that it shows on PyPI and in MCP directories too. Issue forms for bug
+  reports and feature requests.
 - README: screenshots show the `admin` scope; the download links, the
   `WEB_SESSION_HOURS` setting and the Docmost version `list_attachments`
   needs are documented.

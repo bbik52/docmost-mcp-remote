@@ -1,0 +1,51 @@
+<!-- Source of how-it-works.png: render at 2x and save as PNG. -->
+<svg font-family="DejaVu Sans, Helvetica Neue, Arial, sans-serif" id="d" xmlns="http://www.w3.org/2000/svg" width="960" height="400" viewBox="0 0 960 400">
+<defs>
+ <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+ <marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6d28d9"/></marker>
+ <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#5b21b6"/></linearGradient>
+</defs>
+<rect x="1" y="1" width="958" height="398" rx="18" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+<g font-size="15" fill="#0f172a">
+ <!-- member -->
+ <circle cx="105" cy="78" r="15" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+ <path d="M78,122 q27,-34 54,0" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+ <text x="105" y="146" text-anchor="middle" font-weight="700">Member</text>
+ <!-- client -->
+ <rect x="30" y="215" width="150" height="86" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+ <text x="105" y="250" text-anchor="middle" font-weight="700">AI client</text>
+ <text x="105" y="272" text-anchor="middle" font-size="12.5" fill="#475569">Claude, Cursor,</text>
+ <text x="105" y="288" text-anchor="middle" font-size="12.5" fill="#475569">VS Code, …</text>
+ <!-- server -->
+ <rect x="370" y="190" width="220" height="110" rx="14" fill="url(#g)"/>
+ <text x="480" y="232" text-anchor="middle" font-weight="700" font-size="17" fill="#fff">docmost-mcp-remote</text>
+ <text x="480" y="256" text-anchor="middle" font-size="12.5" fill="#ede9fe">OAuth 2.1 server · scopes</text>
+ <text x="480" y="274" text-anchor="middle" font-size="12.5" fill="#ede9fe">snapshots · audit · limits</text>
+ <!-- docmost -->
+ <rect x="780" y="200" width="150" height="90" rx="12" fill="#f5f3ff" stroke="#6d28d9" stroke-width="2"/>
+ <text x="855" y="241" text-anchor="middle" font-weight="700">Docmost CE</text>
+ <text x="855" y="263" text-anchor="middle" font-size="12.5" fill="#475569">0.70 or newer</text>
+ <!-- postgres -->
+ <g transform="translate(480,330)">
+  <ellipse cx="0" cy="0" rx="62" ry="10" fill="#ecfeff" stroke="#0891b2" stroke-width="2"/>
+  <path d="M-62,0 v40 a62,10 0 0 0 124,0 v-40" fill="#ecfeff" stroke="#0891b2" stroke-width="2"/>
+  <text x="0" y="29" text-anchor="middle" font-weight="700" font-size="14">Postgres</text>
+ </g>
+ <text x="560" y="352" font-size="12.5" fill="#475569">encrypted sessions,</text>
+ <text x="560" y="368" font-size="12.5" fill="#475569">snapshots, audit log</text>
+ <line x1="480" y1="300" x2="480" y2="320" stroke="#0891b2" stroke-width="2"/>
+ <!-- arrows -->
+ <line x1="105" y1="156" x2="105" y2="209" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+ <text x="115" y="187" font-size="12" fill="#64748b">uses</text>
+ <path d="M140,100 C300,150 420,140 455,186" fill="none" stroke="#6366f1" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#p)"/>
+ <text x="290" y="70" font-size="13" fill="#4338ca">signs in once with their</text>
+ <text x="290" y="87" font-size="13" fill="#4338ca">own Docmost account</text>
+ <line x1="182" y1="258" x2="364" y2="246" stroke="#475569" stroke-width="2.2" marker-end="url(#a)"/>
+ <text x="273" y="226" text-anchor="middle" font-size="13" fill="#334155">MCP over https</text>
+ <text x="273" y="276" text-anchor="middle" font-size="12" fill="#64748b">OAuth 2.1 or</text>
+ <text x="273" y="292" text-anchor="middle" font-size="12" fill="#64748b">personal token</text>
+ <line x1="592" y1="245" x2="774" y2="245" stroke="#6d28d9" stroke-width="2.2" marker-end="url(#p)"/>
+ <text x="683" y="226" text-anchor="middle" font-size="13" fill="#334155">Docmost API,</text>
+ <text x="683" y="270" text-anchor="middle" font-size="13" fill="#334155">as that member</text>
+</g>
+</svg>
