@@ -16,6 +16,11 @@ when upgrading lists it under "Upgrade notes".
 - MCP prompts: `summarize_page`, `summarize_space`, `answer_from_wiki` and
   `whats_new`, and with the `write` scope `draft_page` and `tidy_page`, which
   ask for confirmation before writing.
+- Workspace people, with the `admin` scope: `create_group`, `update_group`,
+  `add_group_members`, `invite_people`, `resend_invitation`,
+  `revoke_invitation`, `change_workspace_role`, `deactivate_member` and
+  `activate_member`; and with `read`, `list_group_members` and
+  `list_invitations`. Nothing removes people or deletes groups.
 - Pages can also be given as the last part of their URL
   (`getting-started-a1B2c3D4e5`).
 
@@ -29,6 +34,8 @@ when upgrading lists it under "Upgrade notes".
   `restore_page_version`, `upload_attachment` adding the file) are refused
   while someone else is editing the page: when another person saved it less
   than a minute ago. Appending and prepending still work.
+- The `admin` scope is described as managing spaces, groups and people on the
+  consent and account pages; screenshots updated.
 - Resource reads share the tool call rate limit and are written to the audit
   log as `read_resource`.
 
