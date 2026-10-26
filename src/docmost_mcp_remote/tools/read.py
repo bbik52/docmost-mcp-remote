@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -28,6 +29,8 @@ from docmost_mcp_remote.tools.untrusted import NOTICE, truncate, wrap
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
 #: First release whose search takes titleOnly and labelIds.
 SEARCH_FILTERS_SINCE = Version(0, 96, 0)
+#: JSON is several times longer than Markdown; it is never truncated, only refused.
+JSON_FACTOR = 5
 _TAGS = re.compile(r"<[^>]+>")
 _SLUG_ID = re.compile(r"^[A-Za-z0-9]{10}$")
 
@@ -181,19 +184,35 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         description=(
             "Read one page: its title, location and body as Markdown. Accepts a page id, the "
             "short slug id, or a Docmost page URL. Very long bodies are truncated; "
-            "truncated tells when that happened."
+            "truncated tells when that happened. format='json' returns the body as Docmost's "
+            "ProseMirror JSON instead, with all formatting, for replace_page_json; it is "
+            "never truncated, so a page too large for it is refused."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
     )
     async def get_page(
         page: Annotated[str, Field(description="Page id, slug id or Docmost page URL.")],
+        format: Annotated[
+            Literal["markdown", "json"], Field(description="Body as Markdown or as JSON.")
+        ] = "markdown",
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await backend.get_page(page_ref(page))
             await policy.check(backend, found.space_id)
             trail = await backend.breadcrumbs(found.id)
-            body, truncated = truncate(found.content, settings.max_page_chars)
+            if format == "json":
+                text = json.dumps(await backend.get_page_json(found.id), ensure_ascii=False)
+                limit = settings.max_page_chars * JSON_FACTOR
+                if len(text) > limit:
+                    raise ToolError(
+                        f"The page's JSON has {len(text)} characters, more than the {limit} "
+                        "this server returns. Read it as Markdown, or by sections."
+                    )
+                body, truncated = text, False
+            else:
+                text = found.content
+                body, truncated = truncate(text, settings.max_page_chars)
             return {
                 "id": found.id,
                 "slug_id": found.slug_id,
@@ -209,8 +228,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "you_can_edit": found.can_edit,
                 "in_trash": found.deleted_at is not None,
                 "notice": NOTICE,
+                "format": format,
                 "content": wrap(body, source=f"page {found.id}"),
-                "content_chars": len(found.content),
+                "content_chars": len(text),
                 "truncated": truncated,
             }
 

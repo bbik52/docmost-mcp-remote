@@ -127,6 +127,21 @@ CI run. Nothing here is copied from Docmost or from other clients.
   level with `hasChildren`, so `get_page_tree` walks it level by level, up
   to eight requests at a time.
 
+## ProseMirror JSON bodies
+
+- `pages/info` with `format: "json"` returns the body as the editor's
+  ProseMirror document; `pages/update` with `operation: "replace"` and
+  `format: "json"` takes one back. Both work since 0.70.
+- Docmost does not refuse a document it cannot read. Unknown nodes are
+  dropped, which can leave an array where a node belongs, and invalid
+  nesting (a paragraph inside a heading) is stored as is. The server checks
+  documents against the 0.97 schema (`docmost/documents.py`, read with
+  `getSchema(tiptapExtensions)` in the server) and compares an outline of
+  what Docmost stored with what it sent.
+- Docmost fills in default attributes on nodes and marks, so a stored
+  document is not equal to the one sent even when nothing was lost.
+- `pages/history/info` returns a version's body as JSON in `content`.
+
 ## Search filters
 
 - `search` accepts `creatorId` since 0.70, and `titleOnly` and `labelIds`

@@ -8,6 +8,7 @@ its collaboration service dropped it, so only the read-back proves it.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from typing import Annotated, Any, Literal
@@ -21,8 +22,10 @@ from docmost_mcp_remote.auth import current_member_id
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend
+from docmost_mcp_remote.docmost.documents import check_document, outline
 from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import (
     apply_operation,
@@ -41,6 +44,8 @@ logger = logging.getLogger(__name__)
 #: Waits between read-backs after a body write, in seconds.
 READ_BACK_DELAYS = (0.1, 0.2, 0.4, 0.8, 1.5)
 MAX_CONTENT_CHARS = 500_000
+#: Largest ProseMirror JSON document accepted for a write, in characters.
+MAX_JSON_CHARS = 2_000_000
 MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
 
@@ -71,6 +76,72 @@ async def read_back(backend: DocmostBackend, page_id: str, before: str) -> Page 
         if page.content != before:
             return page
     return None
+
+
+async def write_document(
+    backend: DocmostBackend,
+    snapshots: SnapshotStore,
+    member_id: uuid.UUID,
+    page: Page,
+    document: dict[str, Any],
+    reason: str,
+) -> tuple[uuid.UUID, bool]:
+    """Replace a page body with a ProseMirror document: the snapshot id and whether it changed.
+
+    The document is checked first, because Docmost silently drops what it cannot
+    read. What Docmost stored is compared with what was sent, and the previous
+    body is put back when they differ.
+    """
+    problems = check_document(document)
+    if problems:
+        raise ToolError("The document was not written: " + " ".join(problems))
+    if len(json.dumps(document)) > MAX_JSON_CHARS:
+        raise ToolError(f"The document is larger than {MAX_JSON_CHARS} characters of JSON.")
+    current = await backend.get_page_json(page.id)
+    snapshot_id = await snapshots.save(
+        member_id=member_id,
+        page_id=page.id,
+        space_id=page.space_id,
+        title=page.title,
+        content=json.dumps(current, ensure_ascii=False),
+        reason=reason,
+        format="json",
+    )
+    if document == current:
+        return snapshot_id, False
+    await backend.replace_page_json(page.id, document)
+    stored: dict[str, Any] | None = None
+    for delay in READ_BACK_DELAYS:
+        await asyncio.sleep(delay)
+        found = await backend.get_page_json(page.id)
+        if found != current:
+            stored = found
+            break
+    wanted = outline(document)
+    if stored is None:
+        # Docmost fills in default attributes, so a document that only repeats
+        # the current one in another spelling stores nothing new.
+        if wanted == outline(current):
+            return snapshot_id, False
+        logger.warning("JSON write to page %s was not applied by Docmost", page.id)
+        raise ToolError(NOT_SAVED.format(snapshot=snapshot_id))
+    got = outline(stored)
+    if got != wanted:
+        logger.warning("Docmost changed the JSON written to page %s; putting it back", page.id)
+        await backend.replace_page_json(page.id, current)
+        index = next(
+            (i for i, (a, b) in enumerate(zip(wanted, got, strict=False)) if a != b),
+            min(len(wanted), len(got)),
+        )
+        seen = got[index][0] if index < len(got) else "the end of the page"
+        sent = wanted[index][0] if index < len(wanted) else "the end of the page"
+        raise ToolError(
+            f"Docmost did not store the document as sent (node {index}: sent {sent}, stored "
+            f"{seen}), so the previous body was put back. This Docmost release may not know "
+            f"one of the node types. Snapshot {snapshot_id} holds the previous body."
+        )
+    logger.info("Member %s wrote page %s as JSON (%s)", member_id, page.id, reason)
+    return snapshot_id, True
 
 
 async def _all_children(
@@ -238,6 +309,53 @@ def register(
             return await write_body(
                 backend, member_id, found, content, operation, f"update_page:{operation}"
             )
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="replace_page_json",
+        description=(
+            "Replace a whole page body with a ProseMirror JSON document, as get_page with "
+            "format='json' returns it. Unlike Markdown this keeps everything Docmost can show: "
+            "colors, merged table cells, columns, diagrams, mentions, comment highlights. "
+            "Read the page as JSON first, change it and send the complete document. It is "
+            "checked against Docmost's editor schema before anything is written, and the "
+            "previous body is saved as a snapshot. With dry_run=true nothing is written; the "
+            "result lists any problems and shows the change as a Markdown diff."
+        ),
+        annotations=_OVERWRITE,
+        auth=require_scopes("write"),
+    )
+    async def replace_page_json(
+        page: PageRef,
+        document: Annotated[
+            dict[str, Any],
+            Field(description="The ProseMirror document: {'type': 'doc', 'content': [...]}."),
+        ],
+        dry_run: DryRun = False,
+    ) -> dict[str, Any]:
+        member_id = current_member_id()
+
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await load_page(backend, page)
+            if dry_run:
+                problems = check_document(document)
+                current = doc_to_markdown(await backend.get_page_json(found.id))
+                proposed = "" if problems else doc_to_markdown(document)
+                diff, truncated = unified_diff(current, proposed, limit=MAX_DIFF_CHARS)
+                return result(
+                    found,
+                    dry_run=True,
+                    problems=problems,
+                    changed=not problems and proposed.strip() != current.strip(),
+                    notice=NOTICE,
+                    diff=wrap(diff, source=f"page {found.id}") if not problems else None,
+                    diff_truncated=truncated,
+                )
+            snapshot_id, changed = await write_document(
+                backend, snapshots, member_id, found, document, "replace_page_json"
+            )
+            return result(found, snapshot_id=str(snapshot_id), changed=changed)
 
         return await as_member(members, action)
 
@@ -604,9 +722,20 @@ def register(
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, snapshot.info.page_id)
-            written = await write_body(
-                backend, member_id, found, snapshot.content, "replace", "restore_snapshot"
-            )
+            if snapshot.format == "json":
+                saved, changed = await write_document(
+                    backend,
+                    snapshots,
+                    member_id,
+                    found,
+                    json.loads(snapshot.content),
+                    "restore_snapshot",
+                )
+                written = result(found, snapshot_id=str(saved), changed=changed)
+            else:
+                written = await write_body(
+                    backend, member_id, found, snapshot.content, "replace", "restore_snapshot"
+                )
             return {**written, "restored_snapshot_id": snapshot_id}
 
         return await as_member(members, action)

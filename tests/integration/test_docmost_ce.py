@@ -218,3 +218,5 @@ async def test_page_history(owner: CeDocmostSession, space_id: str, unique: str)
     version = await owner.history_version(versions[0].id)
     assert version.page_id == page.id
     assert f"Second {unique}" in version.content
+    assert version.document is not None
+    assert version.document["type"] == "doc"

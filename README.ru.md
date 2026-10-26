@@ -76,7 +76,7 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `list_pages` | read | Дерево страниц пространства, по одному уровню за раз |
 | `get_page_tree` | read | Несколько уровней дерева страниц за один вызов, с ограничением глубины и размера |
 | `recent_pages` | read | Недавно изменённые страницы |
-| `get_page` | read | Одна страница в Markdown по id, slug id или URL в Docmost |
+| `get_page` | read | Одна страница в Markdown или в ProseMirror JSON со всем оформлением, по id, slug id или URL в Docmost |
 | `get_page_outline` | read | Заголовки страницы, чтобы найти раздел, не читая всё тело |
 | `get_section` | read | Один раздел страницы с хешем для `replace_section` |
 | `suggest` | read | Быстрый поиск страниц, людей и групп по названию |
@@ -104,7 +104,9 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `update_comment` | write | Изменить текст своего комментария |
 | `add_labels` | write | Добавить метки странице (Docmost 0.90+) |
 | `remove_label` | write | Убрать метку со страницы (Docmost 0.90+) |
+| `replace_page_json` | write | Заменить тело страницы на ProseMirror JSON, сначала проверив его по схеме редактора; `dry_run` показывает diff |
 | `restore_snapshot` | write | Вернуть тело страницы к снимку |
+| `restore_page_version` | write | Вернуть тело страницы к версии из истории вместе с оформлением |
 | `trash_page` | delete | Переместить страницу в корзину |
 | `restore_page` | delete | Восстановить страницу из корзины |
 | `create_space` | admin | Создать пространство |
