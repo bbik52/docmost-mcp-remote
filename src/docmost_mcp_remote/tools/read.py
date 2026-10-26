@@ -50,10 +50,15 @@ def _formatting(losses: list[str] | None) -> dict[str, Any]:
 
 
 def page_ref(value: str) -> str:
-    """Accept a page id, its short slug id, or a Docmost page URL."""
+    """Accept a page id, its short slug id, a Docmost page URL or its last part.
+
+    The last part of a page URL is the title as a slug followed by the slug id
+    (``getting-started-a1B2c3D4e5``); a page id is a UUID, whose last group has
+    twelve characters, so it is never taken for one.
+    """
     value = value.strip()
-    if "/" in value:
-        last = value.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    last = value.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    if "/" in value or "-" in last:
         candidate = last.rsplit("-", 1)[-1]
         if _SLUG_ID.match(candidate):
             return candidate

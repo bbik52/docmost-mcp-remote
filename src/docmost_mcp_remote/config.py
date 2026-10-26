@@ -82,7 +82,9 @@ class Settings(BaseSettings):
         default=60,
         ge=1,
         le=10_000,
-        description="Tool calls one member may make per minute, over all their clients.",
+        description=(
+            "Tool calls and resource reads one member may make per minute, over all their clients."
+        ),
     )
     relogin_mode: Literal["ask", "stored_password"] = Field(
         default="ask",
