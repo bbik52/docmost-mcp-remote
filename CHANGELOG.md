@@ -15,6 +15,12 @@ when upgrading lists it under "Upgrade notes".
 - `move_page_to_space`: move a page with its child pages to another space.
 - `update_comment`: change the text of one of your own comments; the
   previous text is returned.
+- `get_page_outline`, `get_section` and `replace_section`: read and change
+  one section of a long page. `replace_section` takes the section's hash
+  from `get_section` and refuses to write if the section changed since, and
+  warns when Docmost's Markdown conversion also changed text elsewhere.
+- `update_page` and `replace_section` take `dry_run` to show the change as a
+  diff without writing it.
 
 ### Changed
 

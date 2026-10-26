@@ -266,6 +266,7 @@ def test_read_grant_cannot_write(server: RunningServer) -> None:
         "duplicate_page",
         "add_comment",
         "update_comment",
+        "replace_section",
         "trash_page",
     ):
         assert name not in tools
@@ -416,6 +417,96 @@ def test_rename_page(server: RunningServer, token: str, docmost: FakeDocmost) ->
     assert data["title"] == "Handbook"
     assert data["previous_title"] == "Guide"
     assert docmost.requests("pages/update")[-1] == {"pageId": "p1", "title": "Handbook"}
+
+
+# Sections and dry runs
+
+
+def test_update_page_dry_run(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "update_page", {"page": "p1", "content": "More", "dry_run": True})
+    assert data["dry_run"] is True
+    assert data["changed"] is True
+    assert "+More" in data["diff"]
+    assert docmost.requests("pages/update") == []
+    assert server.call(token, "list_snapshots", {"page": "p1"})["snapshots"] == []
+
+
+def test_replace_section(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    docmost.pages["p1"]["content"] = "# Guide\n\nIntro\n\n## Steps\n\nOld\n\n## End\n\nBye"
+    outline = server.call(token, "get_page_outline", {"page": "p1"})
+    assert [item["index"] for item in outline["sections"]] == [1, 2, 3]
+    assert "Steps" in outline["sections"][1]["heading"]
+    section = server.call(token, "get_section", {"page": "p1", "index": 2})
+    assert "Old" in section["content"]
+
+    arguments = {"page": "p1", "index": 2, "section_hash": section["section_hash"]}
+    preview = server.call(
+        token, "replace_section", {**arguments, "content": "New", "dry_run": True}
+    )
+    assert "-Old" in preview["diff"]
+    assert "+New" in preview["diff"]
+    assert docmost.requests("pages/update") == []
+
+    written = server.call(token, "replace_section", {**arguments, "content": "New"})
+    assert written["changed"] is True
+    assert "warning" not in written
+    assert docmost.pages["p1"]["content"] == (
+        "# Guide\n\nIntro\n\n## Steps\n\nNew\n\n## End\n\nBye"
+    )
+    reasons = [
+        item["reason"] for item in server.call(token, "list_snapshots", {"page": "p1"})["snapshots"]
+    ]
+    assert reasons == ["replace_section"]
+
+    # The old hash no longer matches.
+    with pytest.raises(ToolError, match="changed since you read it"):
+        server.call(token, "replace_section", {**arguments, "content": "Again"})
+
+
+def test_replace_section_with_heading(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"]["content"] = "# Guide\n\nIntro\n\n## Steps\n\nOld"
+    section = server.call(token, "get_section", {"page": "p1", "index": 2})
+    server.call(
+        token,
+        "replace_section",
+        {
+            "page": "p1",
+            "index": 2,
+            "section_hash": section["section_hash"],
+            "content": "## Next steps\n\nNew",
+            "keep_heading": False,
+        },
+    )
+    assert docmost.pages["p1"]["content"] == "# Guide\n\nIntro\n\n## Next steps\n\nNew"
+
+
+def test_replace_section_warns_about_other_changes(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"]["content"] = "Intro\n\n## Steps\n\nOld"
+    original = docmost.recorder.routes["/api/pages/update"]
+    assert callable(original)
+
+    def rewriting(request: httpx.Request) -> httpx.Response:
+        response = original(request)
+        docmost.pages["p1"]["content"] = docmost.pages["p1"]["content"].replace("Intro", "Other")
+        return response
+
+    docmost.recorder.routes["/api/pages/update"] = rewriting
+    section = server.call(token, "get_section", {"page": "p1", "index": 1})
+    written = server.call(
+        token,
+        "replace_section",
+        {"page": "p1", "index": 1, "section_hash": section["section_hash"], "content": "New"},
+    )
+    assert "outside the section" in written["warning"]
+
+
+def test_unknown_section(server: RunningServer, token: str) -> None:
+    with pytest.raises(ToolError, match="No section"):
+        server.call(token, "get_section", {"page": "p1", "index": 9})
 
 
 # Moving
