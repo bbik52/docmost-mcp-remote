@@ -9,7 +9,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from docmost_mcp_remote.docmost.documents import check_document, outline
+from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
 from docmost_mcp_remote.tools import write
 from tests.harness import RunningServer
 from tests.test_write_tools import FakeDocmost
@@ -210,3 +210,53 @@ def test_json_tools_need_write(server: RunningServer) -> None:
     tools = server.tools(server.token())
     assert "replace_page_json" not in tools
     assert "restore_page_version" not in tools
+
+
+def test_markdown_losses() -> None:
+    assert markdown_losses(_doc(_para("plain"), {"type": "horizontalRule"})) == []
+    assert markdown_losses(COLORED) == ["text colors"]
+    no_color = {"type": "textStyle", "attrs": {"color": None}}
+    cleared = _doc(
+        {"type": "paragraph", "content": [{"type": "text", "text": "x", "marks": [no_color]}]}
+    )
+    assert markdown_losses(cleared) == []
+    cell = {"type": "tableCell", "attrs": {"colspan": 2}, "content": [_para("x")]}
+    rich = _doc(
+        {"type": "table", "content": [{"type": "tableRow", "content": [cell]}]},
+        {"type": "columns", "content": [{"type": "column", "content": [_para("l")]}]},
+        _para("centered", textAlign="center"),
+        {"type": "paragraph", "content": [{"type": "mention", "attrs": {"label": "Anna"}}]},
+        {"type": "footnotes", "content": []},
+    )
+    assert markdown_losses(rich) == [
+        "columns",
+        "footnotes blocks",
+        "mentions",
+        "merged table cells",
+        "tables without a header row",
+        "text alignment",
+    ]
+
+
+def test_markdown_replace_keeps_formatting(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"]["document"] = COLORED
+    read = server.call(token, "get_page", {"page": "p1"})
+    assert read["markdown_loses"] == ["text colors"]
+    assert "replace_page_json" in read["hint"]
+    assert server.call(token, "get_page", {"page": "p2"})["markdown_loses"] == []
+    assert server.call(token, "get_page_outline", {"page": "p1"})["markdown_loses"] == [
+        "text colors"
+    ]
+
+    replace = {"page": "p1", "content": "New", "operation": "replace"}
+    with pytest.raises(ToolError, match="would remove its text colors"):
+        server.call(token, "update_page", replace)
+    assert not docmost.requests("pages/update")
+    preview = server.call(token, "update_page", {**replace, "dry_run": True})
+    assert preview["formatting_removed"] == ["text colors"]
+
+    server.call(token, "update_page", {"page": "p1", "content": "More", "operation": "append"})
+    server.call(token, "update_page", {**replace, "drop_formatting": True})
+    assert docmost.pages["p1"]["content"] == "New"

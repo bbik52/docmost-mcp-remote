@@ -22,7 +22,7 @@ from docmost_mcp_remote.auth import current_member_id
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend
-from docmost_mcp_remote.docmost.documents import check_document, outline
+from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
 from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
@@ -34,7 +34,7 @@ from docmost_mcp_remote.sections import (
     replace_section,
     unified_diff,
 )
-from docmost_mcp_remote.tools.common import as_member, page_link
+from docmost_mcp_remote.tools.common import as_member, formatting_hint, page_link
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, wrap
@@ -57,6 +57,15 @@ PageRef = Annotated[str, Field(description="Page id, slug id or Docmost page URL
 Markdown = Annotated[str, Field(max_length=MAX_CONTENT_CHARS, description="Markdown text.")]
 Title = Annotated[str, Field(min_length=1, max_length=500, description="Page title.")]
 DryRun = Annotated[bool, Field(description="Only show the change as a diff; write nothing.")]
+DropFormatting = Annotated[
+    bool,
+    Field(
+        description=(
+            "Write even though the page has formatting Markdown cannot hold, which is then "
+            "removed. Prefer replace_page_json for such pages."
+        )
+    ),
+]
 
 _NO_COLLAB = (
     "This happens when Docmost runs without the Redis of its collaboration service "
@@ -230,8 +239,11 @@ def register(
             content_chars=len(updated.content),
         )
 
-    def preview(page: Page, proposed: str) -> dict[str, Any]:
+    def preview(page: Page, proposed: str, losses: list[str] | None = None) -> dict[str, Any]:
         diff, truncated = unified_diff(page.content, proposed, limit=MAX_DIFF_CHARS)
+        extra: dict[str, Any] = {}
+        if losses:
+            extra = {"formatting_removed": losses, "hint": formatting_hint(losses)}
         return result(
             page,
             dry_run=True,
@@ -239,7 +251,22 @@ def register(
             notice=NOTICE,
             diff=wrap(diff, source=f"page {page.id}"),
             diff_truncated=truncated,
+            **extra,
         )
+
+    async def guard_formatting(
+        backend: DocmostBackend, page: Page, *, dry_run: bool, drop_formatting: bool
+    ) -> list[str]:
+        """Formatting a Markdown replace would remove; refuses a real write unless allowed."""
+        losses = markdown_losses(await backend.get_page_json(page.id))
+        if losses and not dry_run and not drop_formatting:
+            raise ToolError(
+                f"Nothing was written: replacing this page with Markdown would remove its "
+                f"{', '.join(losses)}. Edit it with get_page format='json' and "
+                "replace_page_json, add text with operation 'append' or 'prepend', or pass "
+                "drop_formatting=true to remove the formatting."
+            )
+        return losses
 
     @mcp.tool(
         name="create_page",
@@ -283,10 +310,12 @@ def register(
         description=(
             "Change a page body with Markdown. Prefer operation 'append' or 'prepend', which "
             "keep the existing text, comments and formatting. 'replace' rewrites the whole "
-            "body and drops comment highlights; read the page first and send the complete new "
-            "body. The previous body is saved as a snapshot that restore_snapshot can bring "
-            "back. With dry_run=true nothing is written and the result shows the change as a "
-            "diff. To change one part of a long page, prefer replace_section."
+            "body; read the page first and send the complete new body. It is refused on pages "
+            "with formatting Markdown cannot hold (get_page lists it in markdown_loses); use "
+            "replace_page_json there. The previous body is saved as a snapshot that "
+            "restore_snapshot can bring back. With dry_run=true nothing is written and the "
+            "result shows the change as a diff. To change one part of a long page, prefer "
+            "replace_section."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("write"),
@@ -299,13 +328,19 @@ def register(
             Field(description="append: add at the end; prepend: at the start; replace: all."),
         ] = "append",
         dry_run: DryRun = False,
+        drop_formatting: DropFormatting = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
+            losses: list[str] = []
+            if operation == "replace":
+                losses = await guard_formatting(
+                    backend, found, dry_run=dry_run, drop_formatting=drop_formatting
+                )
             if dry_run:
-                return preview(found, apply_operation(found.content, content, operation))
+                return preview(found, apply_operation(found.content, content, operation), losses)
             return await write_body(
                 backend, member_id, found, content, operation, f"update_page:{operation}"
             )
@@ -367,8 +402,8 @@ def register(
             "since, nothing is written. By default the heading is kept and content replaces "
             "what is under it, subsections included; with keep_heading=false content replaces "
             "the heading too, and an empty content removes the section. The whole body is "
-            "saved as a snapshot first. Comment highlights in the page are dropped, as with "
-            "update_page replace."
+            "saved as a snapshot first. The whole body is rewritten from Markdown, so this is "
+            "refused on pages with formatting Markdown cannot hold, as update_page replace is."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("write"),
@@ -382,6 +417,7 @@ def register(
         ],
         keep_heading: Annotated[bool, Field(description="Keep the section's heading line.")] = True,
         dry_run: DryRun = False,
+        drop_formatting: DropFormatting = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -397,8 +433,11 @@ def register(
             if keep_heading and section.level:
                 new_text = f"{section.heading_line}\n\n{new_text}".strip()
             proposed = replace_section(found.content, section, new_text)
+            losses = await guard_formatting(
+                backend, found, dry_run=dry_run, drop_formatting=drop_formatting
+            )
             if dry_run:
-                return preview(found, proposed)
+                return preview(found, proposed, losses)
             if not proposed.strip():
                 raise ToolError("This would leave the page empty; use update_page instead.")
             written = await write_body(

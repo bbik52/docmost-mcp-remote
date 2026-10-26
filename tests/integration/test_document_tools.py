@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from docmost_mcp_remote.docmost.documents import outline
 from tests.harness import RunningServer
@@ -108,9 +109,16 @@ def test_json_round_trip(server: RunningServer) -> None:
     red = stored["content"][1]["content"][0]["content"][0]
     assert red["marks"][0]["attrs"]["color"] == "#ff0000"
 
+    markdown = server.call(token, "get_page", {"page": page})
+    assert markdown["markdown_loses"] == ["merged table cells", "text colors"]
+    with pytest.raises(ToolError, match="would remove"):
+        server.call(token, "update_page", {"page": page, "content": "x", "operation": "replace"})
+
     restored = server.call(token, "restore_snapshot", {"snapshot_id": written["snapshot_id"]})
     assert restored["changed"] is True
-    assert "Plain" in server.call(token, "get_page", {"page": page})["content"]
+    plain = server.call(token, "get_page", {"page": page})
+    assert "Plain" in plain["content"]
+    assert plain["markdown_loses"] == []
 
 
 def test_restore_page_version(server: RunningServer) -> None:
@@ -131,7 +139,11 @@ def test_restore_page_version(server: RunningServer) -> None:
             break
         time.sleep(2)
     assert versions, "Docmost saved no page version"
-    server.call(token, "update_page", {"page": page, "content": "After", "operation": "replace"})
+    server.call(
+        token,
+        "update_page",
+        {"page": page, "content": "After", "operation": "replace", "drop_formatting": True},
+    )
 
     restored = server.call(token, "restore_page_version", {"version_id": versions[0]["id"]})
     assert restored["changed"] is True

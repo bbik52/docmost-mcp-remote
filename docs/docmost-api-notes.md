@@ -141,6 +141,15 @@ CI run. Nothing here is copied from Docmost or from other clients.
 - Docmost fills in default attributes on nodes and marks, so a stored
   document is not equal to the one sent even when nothing was lost.
 - `pages/history/info` returns a version's body as JSON in `content`.
+- A Markdown round trip (JSON written, Markdown read, Markdown written back)
+  on 0.97 keeps paragraphs, headings, lists, task lists, quotes, code with
+  its language, callouts, details, tables with a header row, math, audio,
+  subpages, page breaks, links, bold, italic, strike, code, super- and
+  subscript. It loses text color, highlight, underline, comment marks,
+  alignment, indentation, merged and colored cells, columns, tabs, mentions,
+  status labels, embeds, YouTube, diagrams (turned into images), attachments,
+  videos and PDFs (turned into links), image size and alignment; a table
+  without a header row gets an empty one, or becomes plain text.
 
 ## Search filters
 

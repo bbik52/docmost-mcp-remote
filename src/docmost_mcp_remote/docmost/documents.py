@@ -205,3 +205,86 @@ def outline(doc: Any) -> list[tuple[str, str]]:
     while len(found) > 1 and found[-1] == ("paragraph", ""):
         found.pop()
     return found
+
+
+#: Node types that survive Docmost's Markdown export and import unchanged,
+#: found by writing each one as JSON, reading Markdown and writing it back.
+_MARKDOWN_SAFE_NODES = frozenset(
+    {
+        "doc", "text", "paragraph", "heading", "blockquote", "bulletList", "orderedList",
+        "listItem", "taskList", "taskItem", "codeBlock", "horizontalRule", "hardBreak",
+        "callout", "details", "detailsSummary", "detailsContent", "table", "tableRow",
+        "tableCell", "tableHeader", "mathInline", "mathBlock", "subpages", "pageBreak",
+        "audio", "image",
+    }
+)  # fmt: skip
+_MARKDOWN_SAFE_MARKS = frozenset(
+    {"bold", "italic", "strike", "code", "link", "superscript", "subscript"}
+)
+_LOST_NODES = {
+    "columns": "columns",
+    "column": "columns",
+    "tabs": "tabs",
+    "tab": "tabs",
+    "tabLabel": "tabs",
+    "tabPanel": "tabs",
+    "mention": "mentions",
+    "status": "status labels",
+    "embed": "embeds",
+    "youtube": "embeds",
+    "drawio": "diagrams",
+    "excalidraw": "diagrams",
+    "attachment": "file attachments",
+    "video": "videos",
+    "pdf": "PDFs",
+}
+_LOST_MARKS = {
+    "textStyle": "text colors",
+    "highlight": "highlights",
+    "underline": "underline",
+    "comment": "comment highlights",
+}
+
+
+def markdown_losses(doc: Any) -> list[str]:
+    """What a page loses when its body is written back from Docmost's Markdown."""
+    found: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        kind = node.get("type")
+        raw = node.get("attrs")
+        attrs: dict[str, Any] = raw if isinstance(raw, dict) else {}
+        if kind not in _MARKDOWN_SAFE_NODES:
+            found.add(_LOST_NODES.get(str(kind), f"{kind} blocks"))
+        if attrs.get("textAlign") not in (None, "left"):
+            found.add("text alignment")
+        if attrs.get("indent"):
+            found.add("indentation")
+        if kind in ("tableCell", "tableHeader"):
+            if (attrs.get("colspan") or 1) > 1 or (attrs.get("rowspan") or 1) > 1:
+                found.add("merged table cells")
+            if attrs.get("backgroundColor"):
+                found.add("cell colors")
+        if kind == "table":
+            rows = [row for row in node.get("content") or [] if isinstance(row, dict)]
+            first = rows[0].get("content") or [] if rows else []
+            if not first or any(
+                not isinstance(cell, dict) or cell.get("type") != "tableHeader" for cell in first
+            ):
+                found.add("tables without a header row")
+        if kind == "image" and (attrs.get("width") or attrs.get("align") not in (None, "center")):
+            found.add("image sizes and alignment")
+        for mark in node.get("marks") or []:
+            name = mark.get("type") if isinstance(mark, dict) else None
+            styles = mark.get("attrs") if isinstance(mark, dict) else None
+            if name == "textStyle" and not (isinstance(styles, dict) and any(styles.values())):
+                continue
+            if name not in _MARKDOWN_SAFE_MARKS:
+                found.add(_LOST_MARKS.get(str(name), f"{name} formatting"))
+        for child in node.get("content") or []:
+            visit(child)
+
+    visit(doc)
+    return sorted(found)

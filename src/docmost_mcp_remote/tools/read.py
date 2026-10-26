@@ -13,6 +13,7 @@ from pydantic import Field
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
+from docmost_mcp_remote.docmost.documents import markdown_losses
 from docmost_mcp_remote.docmost.models import PageSummary
 from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
@@ -20,6 +21,7 @@ from docmost_mcp_remote.sections import find_section, split_sections
 from docmost_mcp_remote.tools.common import (
     all_labels,
     as_member,
+    formatting_hint,
     page_link,
     require_version,
 )
@@ -38,6 +40,13 @@ Cursor = Annotated[
     str | None, Field(description="Value of next_cursor from a previous call, to get more items.")
 ]
 Limit = Annotated[int, Field(ge=1, le=100, description="Maximum number of items to return.")]
+
+
+def _formatting(losses: list[str] | None) -> dict[str, Any]:
+    """Fields telling the client what Markdown does not carry for this page."""
+    if losses is None:
+        return {}
+    return {"markdown_loses": losses, "hint": formatting_hint(losses)}
 
 
 def page_ref(value: str) -> str:
@@ -201,8 +210,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             found = await backend.get_page(page_ref(page))
             await policy.check(backend, found.space_id)
             trail = await backend.breadcrumbs(found.id)
+            document = await backend.get_page_json(found.id)
+            losses: list[str] | None = None
             if format == "json":
-                text = json.dumps(await backend.get_page_json(found.id), ensure_ascii=False)
+                text = json.dumps(document, ensure_ascii=False)
                 limit = settings.max_page_chars * JSON_FACTOR
                 if len(text) > limit:
                     raise ToolError(
@@ -213,6 +224,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             else:
                 text = found.content
                 body, truncated = truncate(text, settings.max_page_chars)
+                losses = markdown_losses(document)
             return {
                 "id": found.id,
                 "slug_id": found.slug_id,
@@ -232,6 +244,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "content": wrap(body, source=f"page {found.id}"),
                 "content_chars": len(text),
                 "truncated": truncated,
+                **_formatting(losses),
             }
 
         return await as_member(members, action)
@@ -268,6 +281,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                     for section in split_sections(found.content)
                 ],
                 "content_chars": len(found.content),
+                **_formatting(markdown_losses(await backend.get_page_json(found.id))),
             }
 
         return await as_member(members, action)
