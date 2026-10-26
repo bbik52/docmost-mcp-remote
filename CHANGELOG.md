@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-26
+
 ### Added
 
 - `whoami` returns `account_url`, the page where a member sees and revokes
