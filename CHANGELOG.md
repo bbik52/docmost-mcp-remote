@@ -7,6 +7,83 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-26
+
+### Added
+
+- `whoami` returns `account_url`, the page where a member sees and revokes
+  connected apps and tokens.
+- `get_space`: details of one space, with its member count and your role.
+- `duplicate_page`: copy a page with its child pages, in the same space or
+  into another space.
+- `move_page_to_space`: move a page with its child pages to another space.
+- `update_comment`: change the text of one of your own comments; the
+  previous text is returned.
+- `get_page_outline`, `get_section` and `replace_section`: read and change
+  one section of a long page. `replace_section` takes the section's hash
+  from `get_section` and refuses to write if the section changed since, and
+  warns when Docmost's Markdown conversion also changed text elsewhere.
+- `update_page` and `replace_section` take `dry_run` to show the change as a
+  diff without writing it.
+- `list_page_history`, `get_page_version` and `diff_page`: the versions
+  Docmost saves of a page, read as Markdown, and a diff between the current
+  body, a version and a snapshot. Versions are stored by Docmost as
+  ProseMirror JSON; the server converts them to Markdown laid out like
+  Docmost's own.
+- `list_backlinks`, `list_labels`, `find_pages_by_label`, `add_labels` and
+  `remove_label` (Docmost 0.90 or newer).
+- `search` takes `title_only` and `labels` (Docmost 0.96 or newer) and
+  `created_by_me`.
+- Links to pages of the same Docmost in Markdown written by the server are
+  stored as internal links, so Docmost counts them as backlinks.
+- `suggest`: quick lookup of pages, people and groups by name, as Docmost's
+  search box does.
+- `get_page_tree`: several levels of a page tree in one call, limited by
+  depth and page count; branches not read are listed to continue from.
+- `list_space_members`, `list_workspace_members` and `list_groups`.
+- A new `admin` scope, never granted unless ticked, for `create_space`,
+  `update_space`, `add_space_members` (users by email, groups by name) and
+  `change_space_member_role`. Docmost still checks the member's own rights.
+  With `ALLOWED_SPACES` set, only spaces in that list can be created or
+  renamed to. Removing members and deleting spaces are not offered.
+- `get_page` takes `format="json"` to return the body as Docmost's
+  ProseMirror JSON, with colors, merged cells, columns, diagrams and
+  mentions that Markdown loses.
+- `replace_page_json`: replace a page body with a ProseMirror document. It is
+  checked against Docmost's editor schema before it is sent, because Docmost
+  silently drops what it cannot read; if what Docmost stored differs from
+  what was sent, the previous body is put back. Snapshots taken before such
+  a write hold JSON, so `restore_snapshot` brings the formatting back too.
+- `get_page` and `get_page_outline` list in `markdown_loses` the formatting of
+  a page that Markdown cannot hold (found by a Markdown round trip on Docmost
+  0.97: colors, highlights, underline, alignment, merged or colored cells,
+  columns, tabs, mentions, embeds, diagrams, files). `update_page` replace and
+  `replace_section` refuse to remove it unless `drop_formatting` is set, and
+  point to `replace_page_json` instead.
+- `restore_page_version`: put a page body back to a version from
+  `list_page_history`, exactly as Docmost saved it.
+- `export_page` and `export_space`: Docmost's own Markdown or HTML export. A
+  single page comes back in the result; a zip (a page with its children or
+  files, a whole space) as a download link to this server, valid for ten
+  minutes and bound to the member, which streams the file from Docmost and
+  stores nothing.
+- `list_attachments` (Docmost 0.96 or newer), `get_attachment` (with a
+  download link, and the text of small text files) and `upload_attachment`
+  (base64, up to 10 MB), which by default adds the file at the end of the
+  page as an image or a file block.
+- Tools that need a newer Docmost than the connected one say so instead of
+  failing with a Docmost error.
+
+### Changed
+
+- README: a note near the top that the project is independent from
+  Docmost, Inc. and that Docmost is their trademark.
+
+### Fixed
+
+- The account and consent pages leave space between the scopes box and the
+  button below it.
+
 ## [1.0.2] - 2026-10-25
 
 ### Changed

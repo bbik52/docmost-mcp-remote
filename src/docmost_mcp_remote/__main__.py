@@ -2,17 +2,30 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import sys
+from typing import Any
 
 import uvicorn
 from pydantic import ValidationError
+from uvicorn.config import LOGGING_CONFIG
 
 from docmost_mcp_remote import __version__
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.server import create_app
 
 logger = logging.getLogger("docmost_mcp_remote")
+
+
+def uvicorn_log_config() -> dict[str, Any]:
+    """Uvicorn's logging, with download links redacted from the access log."""
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config.setdefault("filters", {})["redact_downloads"] = {
+        "()": "docmost_mcp_remote.web.downloads.RedactDownloadLinks"
+    }
+    config["handlers"]["access"]["filters"] = ["redact_downloads"]
+    return config
 
 
 def main() -> None:
@@ -44,6 +57,7 @@ def main() -> None:
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level,
+        log_config=uvicorn_log_config(),
         proxy_headers=True,
         forwarded_allow_ips=settings.forwarded_allow_ips,
         server_header=False,

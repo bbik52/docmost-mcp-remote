@@ -15,6 +15,10 @@ put it behind your domain, and let AI clients such as Claude, Claude Code,
 Cursor or VS Code read and edit the wiki on behalf of each member, with that
 member's own Docmost account and rights.
 
+> Independent community project, not affiliated with or endorsed by Docmost, Inc.
+> Docmost is a trademark of Docmost, Inc.; the name is used only to say which
+> software this server works with.
+
 <!-- mcp-name: io.github.bbik52/docmost-mcp-remote -->
 
 - **One server, one Docmost, many members.** Each member signs in with their
@@ -23,7 +27,7 @@ member's own Docmost account and rights.
 - **Authorization is mandatory.** OAuth 2.1 for remote connectors and personal
   bearer tokens for scripts. There is no unauthenticated mode.
 - **Safe by default.** `read` is the only scope granted without asking.
-  Writing and moving to Trash need explicit scopes. Nothing is deleted
+  Writing, moving to Trash and managing spaces need explicit scopes. Nothing is deleted
   permanently, and the server keeps an encrypted snapshot of a page body
   before every change.
 - **Self-hosted.** One container plus Postgres, with a ready `compose.yaml`.
@@ -62,29 +66,62 @@ sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
 0.97.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
-password.
+password. Labels and backlinks need Docmost 0.90 or newer, and the
+`title_only` and `labels` search filters need 0.96 or newer; on older
+versions these tools answer that Docmost needs an upgrade.
 
 ## Tools
 
 | Tool | Scope | What it does |
 |---|---|---|
-| `whoami` | read | The Docmost account, scopes and Docmost version of this connection |
+| `whoami` | read | The Docmost account, scopes and Docmost version of this connection, and the link to the account page |
 | `list_spaces` | read | Spaces you can access, with your role |
+| `get_space` | read | One space: description, visibility, member count, your role |
 | `list_pages` | read | Page tree of a space, one level at a time |
+| `get_page_tree` | read | Several levels of the page tree in one call, within depth and size limits |
 | `recent_pages` | read | Recently updated pages |
-| `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
-| `search` | read | Full-text search with snippets |
+| `get_page` | read | One page as Markdown, or as ProseMirror JSON with all formatting, by id, slug id or Docmost URL |
+| `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
+| `get_section` | read | One section of a page, with a hash for `replace_section` |
+| `suggest` | read | Quick lookup of pages, people and groups by name |
+| `search` | read | Full-text search with snippets; filters by title only, labels or your own pages |
 | `list_comments` | read | Comments and replies on a page |
 | `list_trash` | read | Pages in the Trash of a space |
 | `list_snapshots` | read | Snapshots this server saved before your changes to a page |
+| `list_page_history` | read | Versions of a page saved by Docmost, with who changed it |
+| `get_page_version` | read | One saved version of a page as Markdown |
+| `list_space_members` | read | Users and groups with a role in a space |
+| `list_workspace_members` | read | People in the workspace, with their role |
+| `list_groups` | read | Groups of the workspace |
+| `diff_page` | read | Unified diff between the current body, a saved version or a snapshot |
+| `list_backlinks` | read | Pages that link to a page, or that a page links to (Docmost 0.90+) |
+| `list_labels` | read | Labels of the workspace or of one page (Docmost 0.90+) |
+| `find_pages_by_label` | read | Pages with a label in a space (Docmost 0.90+) |
+| `export_page` | read | A page as Markdown or HTML; with children or files, a download link to a zip |
+| `export_space` | read | A download link to a zip of a whole space (space admins) |
+| `list_attachments` | read | Files uploaded to a page (Docmost 0.96+) |
+| `get_attachment` | read | Details of a file with a download link; small text files inline |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
-| `update_page` | write | Append, prepend or replace a page body with Markdown |
+| `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
+| `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
 | `rename_page` | write | Change a page title |
 | `move_page` | write | Move a page within its space, to the start, the end or after a sibling |
+| `move_page_to_space` | write | Move a page with its children to another space |
+| `duplicate_page` | write | Copy a page with its children, in the same space or into another one |
 | `add_comment` | write | Comment on a page or reply to a comment |
+| `update_comment` | write | Change the text of one of your own comments |
+| `add_labels` | write | Add labels to a page (Docmost 0.90+) |
+| `remove_label` | write | Remove a label from a page (Docmost 0.90+) |
+| `upload_attachment` | write | Upload a file (base64, up to 10 MB) and add it to the end of the page |
+| `replace_page_json` | write | Replace a page body with ProseMirror JSON, checked against the editor schema first; `dry_run` shows a diff |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
+| `restore_page_version` | write | Put a page body back to a version from its history, formatting included |
 | `trash_page` | delete | Move a page to the Trash |
 | `restore_page` | delete | Restore a page from the Trash |
+| `create_space` | admin | Create a space |
+| `update_space` | admin | Change a space's name, slug or description |
+| `add_space_members` | admin | Give users (by email) and groups (by name) a role in a space |
+| `change_space_member_role` | admin | Change the role of a user or group in a space |
 
 Page bodies, comments and snippets are returned inside a
 `<docmost-untrusted-content>` envelope so the model treats them as data.
@@ -116,7 +153,7 @@ the same account page.
 
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
-member granted, so grant `write` and `delete` only to clients you trust.
+member granted, so grant `write`, `delete` and `admin` only to clients you trust.
 Tool calls are limited per member and recorded in an audit log. See the
 [threat model](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/security-model.md), [SECURITY.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/SECURITY.md) for
 how to report a vulnerability and the [design](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/DESIGN.md).
@@ -273,8 +310,8 @@ proxy's address.
 The MCP endpoint is `PUBLIC_URL/mcp`, for example
 `https://mcp.example.com/mcp`. Clients that support MCP authorization open a
 browser window: sign in with your Docmost email and password and choose what
-the client may do. `read` is always granted; tick `write` or `delete` only
-for clients you trust.
+the client may do. `read` is always granted; tick `write`, `delete` or
+`admin` only for clients you trust.
 
 **Claude.ai and Claude Desktop**: Settings, Connectors, Add custom connector,
 then enter the endpoint URL. The server must be reachable from the internet

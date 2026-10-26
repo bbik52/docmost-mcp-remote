@@ -34,7 +34,7 @@ from docmost_mcp_remote.ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SCOPES = ("read", "write", "delete")
+ALLOWED_SCOPES = ("read", "write", "delete", "admin")
 _LOGIN_COOKIE_AGE = 60 * 60
 _CSP = (
     "default-src 'none'; style-src 'self'; form-action {form_action}; "

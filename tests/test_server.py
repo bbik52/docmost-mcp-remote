@@ -46,6 +46,7 @@ def test_whoami_with_token(server: RunningServer) -> None:
     assert data["email"] == "anna@example.com"
     assert data["scopes"] == ["read", "write"]
     assert data["docmost_version"] == "0.97.0"
+    assert data["account_url"] == f"{server.public_url}/account"
 
 
 def test_expired_docmost_session_is_reported(

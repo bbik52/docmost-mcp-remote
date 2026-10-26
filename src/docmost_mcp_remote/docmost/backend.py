@@ -8,17 +8,31 @@ two protocols.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
+from docmost_mcp_remote.docmost.downloads import Download
 from docmost_mcp_remote.docmost.models import (
+    Attachment,
+    BacklinkDirection,
     BodyOperation,
     Comment,
+    CopiedPage,
     CurrentUser,
+    ExportFormat,
+    Group,
+    HistoryEntry,
+    HistoryVersion,
+    Label,
+    LinkedPage,
     Page,
     PageSummary,
     Paginated,
     SearchHit,
     Space,
+    SpaceMember,
+    SpaceRole,
+    Suggestions,
+    WorkspaceMember,
 )
 from docmost_mcp_remote.docmost.version import VersionCheck
 
@@ -31,6 +45,8 @@ class DocmostBackend(Protocol):
     async def list_spaces(
         self, *, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Space]: ...
+
+    async def get_space(self, space_id: str) -> Space: ...
 
     async def list_pages(
         self,
@@ -49,9 +65,102 @@ class DocmostBackend(Protocol):
 
     async def breadcrumbs(self, page_id: str) -> list[PageSummary]: ...
 
+    async def get_page_json(self, page_id: str) -> dict[str, Any]: ...
+
+    async def replace_page_json(self, page_id: str, document: dict[str, Any]) -> None: ...
+
+    async def get_page_document(self, page_id: str) -> str:
+        """The page body converted by this server from ProseMirror JSON to Markdown."""
+        ...
+
+    async def page_history(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 20
+    ) -> Paginated[HistoryEntry]: ...
+
+    async def history_version(self, history_id: str) -> HistoryVersion: ...
+
     async def search(
-        self, query: str, *, space_id: str | None = None, limit: int = 20
+        self,
+        query: str,
+        *,
+        space_id: str | None = None,
+        limit: int = 20,
+        title_only: bool = False,
+        label_ids: list[str] | None = None,
+        creator_id: str | None = None,
     ) -> list[SearchHit]: ...
+
+    async def backlinks(
+        self,
+        page_id: str,
+        direction: BacklinkDirection,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Paginated[LinkedPage]: ...
+
+    async def create_space(
+        self, name: str, slug: str, *, description: str | None = None
+    ) -> Space: ...
+
+    async def update_space(
+        self,
+        space_id: str,
+        *,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+    ) -> Space: ...
+
+    async def space_members(
+        self, space_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[SpaceMember]: ...
+
+    async def add_space_members(
+        self, space_id: str, role: SpaceRole, *, user_ids: list[str], group_ids: list[str]
+    ) -> None: ...
+
+    async def change_space_member_role(
+        self,
+        space_id: str,
+        role: SpaceRole,
+        *,
+        user_id: str | None = None,
+        group_id: str | None = None,
+    ) -> None: ...
+
+    async def workspace_members(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]: ...
+
+    async def groups(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Group]: ...
+
+    async def suggest(
+        self,
+        query: str,
+        *,
+        pages: bool = True,
+        users: bool = False,
+        groups: bool = False,
+        space_id: str | None = None,
+        limit: int = 10,
+    ) -> Suggestions: ...
+
+    async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]: ...
+
+    async def page_labels(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 100
+    ) -> Paginated[Label]: ...
+
+    async def pages_by_label(
+        self, name: str, *, space_id: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[LinkedPage]: ...
+
+    async def add_labels(self, page_id: str, names: list[str]) -> list[Label]: ...
+
+    async def remove_label(self, page_id: str, label_id: str) -> None: ...
 
     async def list_comments(
         self, page_id: str, *, cursor: str | None = None, limit: int = 50
@@ -76,9 +185,17 @@ class DocmostBackend(Protocol):
         self, page_id: str, *, parent_page_id: str | None, position: str
     ) -> None: ...
 
+    async def move_page_to_space(self, page_id: str, space_id: str) -> None: ...
+
+    async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage: ...
+
+    async def get_comment(self, comment_id: str) -> Comment: ...
+
     async def create_comment(
         self, page_id: str, text: str, *, parent_comment_id: str | None = None
     ) -> Comment: ...
+
+    async def update_comment(self, comment_id: str, text: str) -> Comment: ...
 
     async def list_trash(
         self, space_id: str, *, cursor: str | None = None, limit: int = 50
@@ -87,6 +204,35 @@ class DocmostBackend(Protocol):
     async def move_to_trash(self, page_id: str) -> None: ...
 
     async def restore_from_trash(self, page_id: str) -> None: ...
+
+    async def export_page(
+        self,
+        page_id: str,
+        format: ExportFormat,
+        *,
+        include_children: bool = False,
+        include_attachments: bool = False,
+    ) -> Download:
+        """One page as a Markdown or HTML file, or a zip with its children or files."""
+        ...
+
+    async def export_space(
+        self, space_id: str, format: ExportFormat, *, include_attachments: bool = False
+    ) -> Download:
+        """A whole space as a zip."""
+        ...
+
+    async def attachment_info(self, attachment_id: str) -> Attachment: ...
+
+    async def page_attachments(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Attachment]: ...
+
+    async def download_attachment(self, attachment_id: str, file_name: str) -> Download: ...
+
+    async def upload_attachment(
+        self, page_id: str, file_name: str, content: bytes, mime_type: str
+    ) -> Attachment: ...
 
 
 class DocmostClient(Protocol):

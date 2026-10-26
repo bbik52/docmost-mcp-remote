@@ -6,6 +6,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -13,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.schema import snapshots
 from docmost_mcp_remote.db.store import now
+
+#: Docmost's Markdown of the body, or its ProseMirror JSON as a JSON string.
+SnapshotFormat = Literal["markdown", "json"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +34,7 @@ class Snapshot:
     info: SnapshotInfo
     title: str | None
     content: str
+    format: SnapshotFormat = "markdown"
 
 
 def snapshot_context(snapshot_id: uuid.UUID, member_id: uuid.UUID) -> str:
@@ -50,9 +55,11 @@ class SnapshotStore:
         title: str | None,
         content: str,
         reason: str,
+        format: SnapshotFormat = "markdown",
     ) -> uuid.UUID:
         snapshot_id = uuid.uuid4()
-        plaintext = json.dumps({"title": title, "content": content})
+        # The format lives in the encrypted payload; older snapshots have none.
+        plaintext = json.dumps({"title": title, "content": content, "format": format})
         async with self.engine.begin() as connection:
             await connection.execute(
                 snapshots.insert().values(
@@ -108,7 +115,12 @@ class SnapshotStore:
             content_chars=row.content_chars,
             created_at=row.created_at,
         )
-        return Snapshot(info=info, title=data.get("title"), content=data.get("content", ""))
+        return Snapshot(
+            info=info,
+            title=data.get("title"),
+            content=data.get("content", ""),
+            format="json" if data.get("format") == "json" else "markdown",
+        )
 
     async def cleanup(self, retention: timedelta) -> int:
         async with self.engine.begin() as connection:

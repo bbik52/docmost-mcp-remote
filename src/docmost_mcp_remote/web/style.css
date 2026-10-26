@@ -9,7 +9,7 @@ h1 { margin-top: 0; font-size: 1.5rem; } h2 { font-size: 1.1rem; margin-top: 2re
 .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 label { display: block; margin: 12px 0; } label.check { margin: 6px 0; }
 input[type=email], input[type=password], input[type=text] { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
-fieldset { border: 1px solid var(--border); border-radius: 6px; }
+fieldset { margin: 12px 0 16px; border: 1px solid var(--border); border-radius: 6px; }
 button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
 button.danger { background: transparent; color: var(--danger); padding: 0; } button.link { background: transparent; color: var(--accent); padding: 0; }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from typing import Any
 
@@ -16,6 +16,7 @@ from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.schema import snapshots
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store, now
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
 from docmost_mcp_remote.tools import write
 from tests.conftest import SECRET
 from tests.fakes import Handler, Recorder, docmost_routes, error, ok
@@ -32,7 +33,15 @@ class FakeDocmost:
 
     def __init__(self) -> None:
         self.pages: dict[str, dict[str, Any]] = {}
+        self.history: dict[str, dict[str, Any]] = {}
+        self.comments: dict[str, dict[str, Any]] = {
+            "c1": self.comment("c1", "p1", "docmost-user-1", "Old text"),
+            "c2": self.comment("c2", "p1", "someone-else", "Not mine"),
+            "c3": self.comment("c3", "p3", "docmost-user-1", "Other space"),
+        }
         self.apply_body_updates = True
+        #: What Docmost makes of a JSON body before storing it.
+        self.store_json: Callable[[dict[str, Any]], dict[str, Any]] = lambda doc: doc
         self.recorder = Recorder(self.routes())
         self.add("p1", "Guide", "# Guide\n\nIntro", position="a0VVV")
         self.add("p2", "Second", "", position="a1VVV")
@@ -49,6 +58,30 @@ class FakeDocmost:
             "position": "a0VVV",
             "deletedAt": None,
             **extra,
+        }
+
+    def add_version(self, version_id: str, page_id: str, text: str) -> None:
+        self.history[version_id] = {
+            "id": version_id,
+            "pageId": page_id,
+            "spaceId": self.pages[page_id]["spaceId"],
+            "title": self.pages[page_id]["title"],
+            "createdAt": "2026-10-25T10:00:00Z",
+            "lastUpdatedBy": {"id": "u1", "name": "Anna"},
+            "contributors": [{"id": "u1", "name": "Anna"}],
+            "content": text_to_doc(text),
+        }
+
+    def comment(self, comment_id: str, page_id: str, creator_id: str, text: str) -> dict[str, Any]:
+        return {
+            "id": comment_id,
+            "pageId": page_id,
+            "spaceId": "s2" if page_id == "p3" else "s1",
+            "creatorId": creator_id,
+            "content": {
+                "type": "doc",
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+            },
         }
 
     def requests(self, path: str) -> list[dict[str, Any]]:
@@ -71,11 +104,28 @@ class FakeDocmost:
             return page if page and page["deletedAt"] is None else None
 
         def info(request: httpx.Request) -> httpx.Response:
-            page = live(body(request)["pageId"])
+            data = body(request)
+            page = live(data["pageId"])
             if page is None:
                 return error(404, "Page not found")
             space = next(space for space in SPACES if space["id"] == page["spaceId"])
-            return ok({**page, "space": space})
+            if data.get("format") == "json":
+                document = page.get("document") or text_to_doc(page["content"])
+                return ok({**page, "space": space, "content": document})
+            return ok({k: v for k, v in page.items() if k != "document"} | {"space": space})
+
+        def history(request: httpx.Request) -> httpx.Response:
+            page_id = body(request)["pageId"]
+            items = [
+                {key: value for key, value in item.items() if key != "content"}
+                for item in self.history.values()
+                if item["pageId"] == page_id
+            ]
+            return ok({"items": items[::-1], "meta": {"hasNextPage": False}})
+
+        def history_info(request: httpx.Request) -> httpx.Response:
+            found = self.history.get(body(request)["historyId"])
+            return ok(found) if found else error(404, "Page history not found")
 
         def create(request: httpx.Request) -> httpx.Response:
             data = body(request)
@@ -96,7 +146,11 @@ class FakeDocmost:
                 return error(404, "Page not found")
             if "title" in data:
                 page["title"] = data["title"]
-            if "content" in data and self.apply_body_updates:
+            if "content" in data and self.apply_body_updates and data.get("format") == "json":
+                page["document"] = self.store_json(data["content"])
+                page["content"] = doc_to_markdown(page["document"])
+            elif "content" in data and self.apply_body_updates:
+                page.pop("document", None)
                 text, operation = data["content"], data["operation"]
                 if operation == "append":
                     page["content"] = f"{page['content']}\n\n{text}".strip()
@@ -157,10 +211,47 @@ class FakeDocmost:
                 }
             )
 
+        def comment_info(request: httpx.Request) -> httpx.Response:
+            found = self.comments.get(body(request)["commentId"])
+            return ok(found) if found else error(404, "Comment not found")
+
+        def comment_update(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            found = self.comments[data["commentId"]]
+            if found["creatorId"] != "docmost-user-1":
+                return error(403, "You can only edit your own comments")
+            found["content"] = json.loads(data["content"])
+            return ok(found)
+
+        def duplicate(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            source = self.pages[data["pageId"]]
+            page_id = f"n{len(self.pages)}"
+            same_space = "spaceId" not in data
+            self.add(
+                page_id,
+                f"Copy of {source['title']}" if same_space else source["title"],
+                source["content"],
+                spaceId=data.get("spaceId", source["spaceId"]),
+                parentPageId=source["parentPageId"] if same_space else None,
+            )
+            return ok({**self.pages[page_id], "childPageIds": ["n-child"]})
+
+        def move_to_space(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            page = self.pages[data["pageId"]]
+            if page["spaceId"] == data["spaceId"]:
+                return error(400, "Page is already in this space")
+            page["spaceId"] = data["spaceId"]
+            page["parentPageId"] = None
+            return httpx.Response(200, json={"success": True, "status": 200})
+
         routes.update(
             {
                 "/api/spaces": ok({"items": SPACES, "meta": {"hasNextPage": False}}),
                 "/api/pages/info": info,
+                "/api/pages/history": history,
+                "/api/pages/history/info": history_info,
                 "/api/pages/breadcrumbs": ok([]),
                 "/api/pages/create": create,
                 "/api/pages/update": update_page,
@@ -170,6 +261,10 @@ class FakeDocmost:
                 "/api/pages/restore": restore,
                 "/api/pages/trash": trashed,
                 "/api/comments/create": comment,
+                "/api/comments/info": comment_info,
+                "/api/comments/update": comment_update,
+                "/api/pages/duplicate": duplicate,
+                "/api/pages/move-to-space": move_to_space,
             }
         )
         return routes
@@ -202,7 +297,19 @@ def token(server: RunningServer) -> str:
 def test_read_grant_cannot_write(server: RunningServer) -> None:
     read_only = server.token()
     tools = server.tools(read_only)
-    for name in ("create_page", "update_page", "move_page", "add_comment", "trash_page"):
+    for name in (
+        "create_page",
+        "update_page",
+        "move_page",
+        "move_page_to_space",
+        "duplicate_page",
+        "add_comment",
+        "update_comment",
+        "replace_section",
+        "add_labels",
+        "remove_label",
+        "trash_page",
+    ):
         assert name not in tools
     with pytest.raises(ToolError):
         server.call(read_only, "update_page", {"page": "p1", "content": "x"})
@@ -353,6 +460,96 @@ def test_rename_page(server: RunningServer, token: str, docmost: FakeDocmost) ->
     assert docmost.requests("pages/update")[-1] == {"pageId": "p1", "title": "Handbook"}
 
 
+# Sections and dry runs
+
+
+def test_update_page_dry_run(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "update_page", {"page": "p1", "content": "More", "dry_run": True})
+    assert data["dry_run"] is True
+    assert data["changed"] is True
+    assert "+More" in data["diff"]
+    assert docmost.requests("pages/update") == []
+    assert server.call(token, "list_snapshots", {"page": "p1"})["snapshots"] == []
+
+
+def test_replace_section(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    docmost.pages["p1"]["content"] = "# Guide\n\nIntro\n\n## Steps\n\nOld\n\n## End\n\nBye"
+    outline = server.call(token, "get_page_outline", {"page": "p1"})
+    assert [item["index"] for item in outline["sections"]] == [1, 2, 3]
+    assert "Steps" in outline["sections"][1]["heading"]
+    section = server.call(token, "get_section", {"page": "p1", "index": 2})
+    assert "Old" in section["content"]
+
+    arguments = {"page": "p1", "index": 2, "section_hash": section["section_hash"]}
+    preview = server.call(
+        token, "replace_section", {**arguments, "content": "New", "dry_run": True}
+    )
+    assert "-Old" in preview["diff"]
+    assert "+New" in preview["diff"]
+    assert docmost.requests("pages/update") == []
+
+    written = server.call(token, "replace_section", {**arguments, "content": "New"})
+    assert written["changed"] is True
+    assert "warning" not in written
+    assert docmost.pages["p1"]["content"] == (
+        "# Guide\n\nIntro\n\n## Steps\n\nNew\n\n## End\n\nBye"
+    )
+    reasons = [
+        item["reason"] for item in server.call(token, "list_snapshots", {"page": "p1"})["snapshots"]
+    ]
+    assert reasons == ["replace_section"]
+
+    # The old hash no longer matches.
+    with pytest.raises(ToolError, match="changed since you read it"):
+        server.call(token, "replace_section", {**arguments, "content": "Again"})
+
+
+def test_replace_section_with_heading(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"]["content"] = "# Guide\n\nIntro\n\n## Steps\n\nOld"
+    section = server.call(token, "get_section", {"page": "p1", "index": 2})
+    server.call(
+        token,
+        "replace_section",
+        {
+            "page": "p1",
+            "index": 2,
+            "section_hash": section["section_hash"],
+            "content": "## Next steps\n\nNew",
+            "keep_heading": False,
+        },
+    )
+    assert docmost.pages["p1"]["content"] == "# Guide\n\nIntro\n\n## Next steps\n\nNew"
+
+
+def test_replace_section_warns_about_other_changes(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"]["content"] = "Intro\n\n## Steps\n\nOld"
+    original = docmost.recorder.routes["/api/pages/update"]
+    assert callable(original)
+
+    def rewriting(request: httpx.Request) -> httpx.Response:
+        response = original(request)
+        docmost.pages["p1"]["content"] = docmost.pages["p1"]["content"].replace("Intro", "Other")
+        return response
+
+    docmost.recorder.routes["/api/pages/update"] = rewriting
+    section = server.call(token, "get_section", {"page": "p1", "index": 1})
+    written = server.call(
+        token,
+        "replace_section",
+        {"page": "p1", "index": 1, "section_hash": section["section_hash"], "content": "New"},
+    )
+    assert "outside the section" in written["warning"]
+
+
+def test_unknown_section(server: RunningServer, token: str) -> None:
+    with pytest.raises(ToolError, match="No section"):
+        server.call(token, "get_section", {"page": "p1", "index": 9})
+
+
 # Moving
 
 
@@ -386,7 +583,76 @@ def test_move_page_refusals(server: RunningServer, token: str) -> None:
         server.call(token, "move_page", {"page": "p1", "after_page_id": "p3"})
 
 
+# Copies and other spaces
+
+
+def test_duplicate_page_in_same_space(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    data = server.call(token, "duplicate_page", {"page": "p1"})
+    assert data["title"] == "Copy of Guide"
+    assert data["source_page_id"] == "p1"
+    assert data["space_id"] == "s1"
+    assert data["copied_child_pages"] == 1
+    assert docmost.requests("pages/duplicate") == [{"pageId": "p1"}]
+    assert docmost.pages[data["id"]]["content"] == "# Guide\n\nIntro"
+
+
+def test_duplicate_page_to_other_space(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    data = server.call(token, "duplicate_page", {"page": "p1", "target_space_id": "s2"})
+    assert data["title"] == "Guide"
+    assert data["space_id"] == "s2"
+    assert docmost.requests("pages/duplicate") == [{"pageId": "p1", "spaceId": "s2"}]
+    # The same space as the source means a plain duplicate.
+    server.call(token, "duplicate_page", {"page": "p1", "target_space_id": "s1"})
+    assert docmost.requests("pages/duplicate")[-1] == {"pageId": "p1"}
+
+
+def test_move_page_to_space(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "move_page_to_space", {"page": "p2", "space_id": "s2"})
+    assert data["space_id"] == "s2"
+    assert data["previous_space_id"] == "s1"
+    assert docmost.pages["p2"]["spaceId"] == "s2"
+    with pytest.raises(ToolError, match="already in this space"):
+        server.call(token, "move_page_to_space", {"page": "p2", "space_id": "s2"})
+
+
+def test_copies_respect_space_restriction(engine: AsyncEngine, docmost: FakeDocmost) -> None:
+    with RunningServer(docmost.recorder.client(), allowed_spaces="general") as server:
+        token = server.token(scopes=("write",))
+        for tool, arguments in (
+            ("duplicate_page", {"page": "p1", "target_space_id": "s2"}),
+            ("duplicate_page", {"page": "p3"}),
+            ("move_page_to_space", {"page": "p1", "space_id": "s2"}),
+            ("move_page_to_space", {"page": "p3", "space_id": "s1"}),
+            ("update_comment", {"comment_id": "c3", "text": "x"}),
+        ):
+            with pytest.raises(ToolError, match="not found"):
+                server.call(token, tool, arguments)
+    assert docmost.requests("pages/duplicate") == []
+    assert docmost.requests("pages/move-to-space") == []
+    assert docmost.requests("comments/update") == []
+
+
 # Comments and Trash
+
+
+def test_update_comment(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "update_comment", {"comment_id": "c1", "text": "New text"})
+    assert data["id"] == "c1"
+    assert data["page_id"] == "p1"
+    assert "Old text" in data["previous_text"]
+    assert data["previous_text"].startswith("<docmost-untrusted-content")
+    assert "New text" in docmost.requests("comments/update")[-1]["content"]
+
+
+def test_update_comment_of_someone_else(server: RunningServer, token: str) -> None:
+    with pytest.raises(ToolError, match="only edit your own comments"):
+        server.call(token, "update_comment", {"comment_id": "c2", "text": "x"})
+    with pytest.raises(ToolError, match="Comment not found"):
+        server.call(token, "update_comment", {"comment_id": "missing", "text": "x"})
 
 
 def test_add_comment(server: RunningServer, token: str, docmost: FakeDocmost) -> None:

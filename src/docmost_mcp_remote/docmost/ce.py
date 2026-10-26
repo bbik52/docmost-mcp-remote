@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote, unquote
 
 import httpx
 
+from docmost_mcp_remote.docmost.downloads import Download
 from docmost_mcp_remote.docmost.errors import (
     DocmostAuthError,
     DocmostBadRequestError,
@@ -23,17 +26,31 @@ from docmost_mcp_remote.docmost.errors import (
     DocmostResponseTooLargeError,
     DocmostUnavailableError,
 )
+from docmost_mcp_remote.docmost.links import mark_internal_links
 from docmost_mcp_remote.docmost.models import (
+    Attachment,
+    BacklinkDirection,
     BodyOperation,
     Comment,
+    CopiedPage,
     CurrentUser,
+    ExportFormat,
+    Group,
+    HistoryEntry,
+    HistoryVersion,
+    Label,
+    LinkedPage,
     Page,
     PageSummary,
     Paginated,
     SearchHit,
     Space,
+    SpaceMember,
+    SpaceRole,
+    Suggestions,
+    WorkspaceMember,
 )
-from docmost_mcp_remote.docmost.prosemirror import text_to_doc
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
 from docmost_mcp_remote.docmost.version import VersionCheck, check_version
 
 logger = logging.getLogger(__name__)
@@ -42,6 +59,14 @@ logger = logging.getLogger(__name__)
 MAX_PAGE_SIZE = 100
 _DEFAULT_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 _DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+#: Docmost builds an export before it sends the first byte.
+_DOWNLOAD_TIMEOUT = httpx.Timeout(300.0, connect=5.0)
+_FILE_NAME = re.compile(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', re.IGNORECASE)
+
+
+def _file_name(disposition: str | None) -> str | None:
+    match = _FILE_NAME.search(disposition or "")
+    return unquote(match.group(1)) if match else None
 
 
 def _limit(value: int) -> int:
@@ -71,6 +96,7 @@ class CeDocmostClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._max_response_bytes = max_response_bytes
+        self.web_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api",
             timeout=timeout,
@@ -105,16 +131,69 @@ class CeDocmostClient:
     def session(self, token: str) -> CeDocmostSession:
         return CeDocmostSession(self, token)
 
-    async def call(self, path: str, body: dict[str, Any], token: str) -> Any:
-        """POST to ``/api/<path>`` and return the ``data`` member of the answer."""
-        payload = (await self._send(path, body, token)).json()
+    async def call(
+        self,
+        path: str,
+        body: dict[str, Any],
+        token: str,
+        *,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> Any:
+        """POST to ``/api/<path>`` and return the ``data`` member of the answer.
+
+        With ``files`` the body is sent as a multipart form instead of JSON.
+        """
+        payload = (await self._send(path, body, token, files=files)).json()
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
         return payload
 
-    async def _send(self, path: str, body: dict[str, Any], token: str | None) -> _Reply:
+    async def open(
+        self, method: str, path: str, token: str, body: dict[str, Any] | None = None
+    ) -> Download:
+        """Start reading a file from Docmost without holding it in memory."""
+        headers = {"authorization": f"Bearer {token}", "accept": "*/*"}
+        request = self._http.build_request(
+            method, path, json=body, headers=headers, timeout=_DOWNLOAD_TIMEOUT
+        )
+        try:
+            response = await self._http.send(request, stream=True)
+        except httpx.TimeoutException:
+            raise DocmostUnavailableError(f"Docmost timed out on {path}") from None
+        except httpx.HTTPError as exc:
+            raise DocmostUnavailableError(
+                f"Docmost is not reachable: {type(exc).__name__}"
+            ) from None
+        if response.status_code >= 400:
+            try:
+                content = await self._read_limited(response, path)
+            finally:
+                await response.aclose()
+            _Reply(response.status_code, "", {}, content).raise_for_status(path)
+        declared = response.headers.get("content-length")
+        return Download(
+            content_type=response.headers.get("content-type", "application/octet-stream"),
+            file_name=_file_name(response.headers.get("content-disposition")),
+            size=int(declared) if declared and declared.isdigit() else None,
+            chunks=response.aiter_bytes(),
+            close=response.aclose,
+        )
+
+    async def _send(
+        self,
+        path: str,
+        body: dict[str, Any],
+        token: str | None,
+        *,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> _Reply:
         headers = {"authorization": f"Bearer {token}"} if token else {}
-        request = self._http.build_request("POST", path, json=body, headers=headers)
+        if files is None:
+            request = self._http.build_request("POST", path, json=body, headers=headers)
+        else:
+            request = self._http.build_request(
+                "POST", path, data=body, files=files, headers=headers
+            )
         try:
             response = await self._http.send(request, stream=True)
         except httpx.TimeoutException:
@@ -231,6 +310,103 @@ class CeDocmostSession:
         data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})
         return _paginated(data, [Space.from_api(item) for item in _items(data)])
 
+    async def get_space(self, space_id: str) -> Space:
+        data = await self._call("spaces/info", {"spaceId": space_id})
+        return Space.from_api(data)
+
+    async def create_space(self, name: str, slug: str, *, description: str | None = None) -> Space:
+        body: dict[str, Any] = {"name": name, "slug": slug}
+        if description is not None:
+            body["description"] = description
+        data = await self._call("spaces/create", body)
+        return Space.from_api(data)
+
+    async def update_space(
+        self,
+        space_id: str,
+        *,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+    ) -> Space:
+        body: dict[str, Any] = {"spaceId": space_id}
+        for key, value in (("name", name), ("slug", slug), ("description", description)):
+            if value is not None:
+                body[key] = value
+        data = await self._call("spaces/update", body)
+        return Space.from_api(data)
+
+    async def space_members(
+        self, space_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[SpaceMember]:
+        data = await self._call(
+            "spaces/members", {"spaceId": space_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [SpaceMember.model_validate(item) for item in _items(data)])
+
+    async def add_space_members(
+        self, space_id: str, role: SpaceRole, *, user_ids: list[str], group_ids: list[str]
+    ) -> None:
+        await self._call(
+            "spaces/members/add",
+            {"spaceId": space_id, "role": role, "userIds": user_ids, "groupIds": group_ids},
+        )
+
+    async def change_space_member_role(
+        self,
+        space_id: str,
+        role: SpaceRole,
+        *,
+        user_id: str | None = None,
+        group_id: str | None = None,
+    ) -> None:
+        body: dict[str, Any] = {"spaceId": space_id, "role": role}
+        if user_id:
+            body["userId"] = user_id
+        if group_id:
+            body["groupId"] = group_id
+        await self._call("spaces/members/change-role", body)
+
+    async def workspace_members(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if query:
+            body["query"] = query
+        data = await self._call("workspace/members", body)
+        return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+
+    async def suggest(
+        self,
+        query: str,
+        *,
+        pages: bool = True,
+        users: bool = False,
+        groups: bool = False,
+        space_id: str | None = None,
+        limit: int = 10,
+    ) -> Suggestions:
+        body: dict[str, Any] = {
+            "query": query,
+            "includePages": pages,
+            "includeUsers": users,
+            "includeGroups": groups,
+            "limit": _limit(limit),
+        }
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("search/suggest", body)
+        return Suggestions.model_validate(data or {})
+
+    async def groups(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Group]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if query:
+            body["query"] = query
+        data = await self._call("groups", body)
+        return _paginated(data, [Group.model_validate(item) for item in _items(data)])
+
     async def list_pages(
         self,
         space_id: str,
@@ -262,14 +438,99 @@ class CeDocmostSession:
         data = await self._call("pages/breadcrumbs", {"pageId": page_id})
         return [PageSummary.model_validate(item) for item in _items(data)]
 
+    async def get_page_json(self, page_id: str) -> dict[str, Any]:
+        data = await self._call("pages/info", {"pageId": page_id, "format": "json"})
+        content = data.get("content") if isinstance(data, dict) else None
+        return content if isinstance(content, dict) else {"type": "doc", "content": []}
+
+    async def replace_page_json(self, page_id: str, document: dict[str, Any]) -> None:
+        await self._call(
+            "pages/update",
+            {"pageId": page_id, "content": document, "operation": "replace", "format": "json"},
+        )
+
+    async def get_page_document(self, page_id: str) -> str:
+        data = await self._call("pages/info", {"pageId": page_id, "format": "json"})
+        content = data.get("content") if isinstance(data, dict) else None
+        return doc_to_markdown(content) if isinstance(content, dict) else ""
+
+    async def page_history(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 20
+    ) -> Paginated[HistoryEntry]:
+        data = await self._call(
+            "pages/history", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [HistoryEntry.model_validate(item) for item in _items(data)])
+
+    async def history_version(self, history_id: str) -> HistoryVersion:
+        data = await self._call("pages/history/info", {"historyId": history_id})
+        return HistoryVersion.from_api(data)
+
     async def search(
-        self, query: str, *, space_id: str | None = None, limit: int = 20
+        self,
+        query: str,
+        *,
+        space_id: str | None = None,
+        limit: int = 20,
+        title_only: bool = False,
+        label_ids: list[str] | None = None,
+        creator_id: str | None = None,
     ) -> list[SearchHit]:
         body: dict[str, Any] = {"query": query, "limit": _limit(limit)}
         if space_id:
             body["spaceId"] = space_id
+        if title_only:
+            body["titleOnly"] = True
+        if label_ids:
+            body["labelIds"] = label_ids
+        if creator_id:
+            body["creatorId"] = creator_id
         data = await self._call("search", body)
         return [SearchHit.from_api(item) for item in _items(data)][: _limit(limit)]
+
+    async def backlinks(
+        self,
+        page_id: str,
+        direction: BacklinkDirection,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Paginated[LinkedPage]:
+        data = await self._call(
+            "pages/backlinks",
+            {"pageId": page_id, "direction": direction, "limit": _limit(limit), "cursor": cursor},
+        )
+        return _paginated(data, [LinkedPage.model_validate(item) for item in _items(data)])
+
+    async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]:
+        data = await self._call(
+            "labels", {"type": "page", "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Label.model_validate(item) for item in _items(data)])
+
+    async def page_labels(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 100
+    ) -> Paginated[Label]:
+        data = await self._call(
+            "pages/labels", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Label.model_validate(item) for item in _items(data)])
+
+    async def pages_by_label(
+        self, name: str, *, space_id: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[LinkedPage]:
+        body: dict[str, Any] = {"name": name, "limit": _limit(limit), "cursor": cursor}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("labels/pages", body)
+        return _paginated(data, [LinkedPage.model_validate(item) for item in _items(data)])
+
+    async def add_labels(self, page_id: str, names: list[str]) -> list[Label]:
+        data = await self._call("pages/labels/add", {"pageId": page_id, "names": names})
+        return [Label.model_validate(item) for item in _items(data)]
+
+    async def remove_label(self, page_id: str, label_id: str) -> None:
+        await self._call("pages/labels/remove", {"pageId": page_id, "labelId": label_id})
 
     async def list_comments(
         self, page_id: str, *, cursor: str | None = None, limit: int = 50
@@ -289,7 +550,7 @@ class CeDocmostSession:
     ) -> Page:
         body: dict[str, Any] = {"spaceId": space_id, "title": title}
         if markdown:
-            body["content"] = markdown
+            body["content"] = mark_internal_links(markdown, self._client.web_url)
             body["format"] = "markdown"
         if parent_page_id:
             body["parentPageId"] = parent_page_id
@@ -299,7 +560,12 @@ class CeDocmostSession:
     async def update_page_body(self, page_id: str, markdown: str, operation: BodyOperation) -> None:
         await self._call(
             "pages/update",
-            {"pageId": page_id, "content": markdown, "operation": operation, "format": "markdown"},
+            {
+                "pageId": page_id,
+                "content": mark_internal_links(markdown, self._client.web_url),
+                "operation": operation,
+                "format": "markdown",
+            },
         )
 
     async def rename_page(self, page_id: str, title: str) -> None:
@@ -311,6 +577,20 @@ class CeDocmostSession:
             {"pageId": page_id, "parentPageId": parent_page_id, "position": position},
         )
 
+    async def move_page_to_space(self, page_id: str, space_id: str) -> None:
+        await self._call("pages/move-to-space", {"pageId": page_id, "spaceId": space_id})
+
+    async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage:
+        body: dict[str, Any] = {"pageId": page_id}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("pages/duplicate", body)
+        return CopiedPage.model_validate(data)
+
+    async def get_comment(self, comment_id: str) -> Comment:
+        data = await self._call("comments/info", {"commentId": comment_id})
+        return Comment.from_api(data)
+
     async def create_comment(
         self, page_id: str, text: str, *, parent_comment_id: str | None = None
     ) -> Comment:
@@ -318,6 +598,13 @@ class CeDocmostSession:
         if parent_comment_id:
             body["parentCommentId"] = parent_comment_id
         data = await self._call("comments/create", body)
+        return Comment.from_api(data)
+
+    async def update_comment(self, comment_id: str, text: str) -> Comment:
+        data = await self._call(
+            "comments/update",
+            {"commentId": comment_id, "content": json.dumps(text_to_doc(text))},
+        )
         return Comment.from_api(data)
 
     async def list_trash(
@@ -334,3 +621,53 @@ class CeDocmostSession:
 
     async def restore_from_trash(self, page_id: str) -> None:
         await self._call("pages/restore", {"pageId": page_id})
+
+    async def export_page(
+        self,
+        page_id: str,
+        format: ExportFormat,
+        *,
+        include_children: bool = False,
+        include_attachments: bool = False,
+    ) -> Download:
+        body: dict[str, Any] = {"pageId": page_id, "format": format}
+        if include_children:
+            body["includeChildren"] = True
+        if include_attachments:
+            body["includeAttachments"] = True
+        return await self._client.open("POST", "pages/export", self._token, body)
+
+    async def export_space(
+        self, space_id: str, format: ExportFormat, *, include_attachments: bool = False
+    ) -> Download:
+        body: dict[str, Any] = {"spaceId": space_id, "format": format}
+        if include_attachments:
+            body["includeAttachments"] = True
+        return await self._client.open("POST", "spaces/export", self._token, body)
+
+    async def attachment_info(self, attachment_id: str) -> Attachment:
+        data = await self._call("files/info", {"attachmentId": attachment_id})
+        return Attachment.model_validate(data)
+
+    async def page_attachments(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Attachment]:
+        data = await self._call(
+            "pages/attachments", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Attachment.model_validate(item) for item in _items(data)])
+
+    async def download_attachment(self, attachment_id: str, file_name: str) -> Download:
+        path = f"files/{quote(attachment_id, safe='')}/{quote(file_name, safe='')}"
+        return await self._client.open("GET", path, self._token)
+
+    async def upload_attachment(
+        self, page_id: str, file_name: str, content: bytes, mime_type: str
+    ) -> Attachment:
+        data = await self._client.call(
+            "files/upload",
+            {"pageId": page_id},
+            self._token,
+            files={"file": (file_name, content, mime_type)},
+        )
+        return Attachment.model_validate(data)
