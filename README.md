@@ -74,7 +74,7 @@ versions these tools answer that Docmost needs an upgrade.
 
 | Tool | Scope | What it does |
 |---|---|---|
-| `whoami` | read | The Docmost account, scopes and Docmost version of this connection |
+| `whoami` | read | The Docmost account, scopes and Docmost version of this connection, and the link to the account page |
 | `list_spaces` | read | Spaces you can access, with your role |
 | `get_space` | read | One space: description, visibility, member count, your role |
 | `list_pages` | read | Page tree of a space, one level at a time |

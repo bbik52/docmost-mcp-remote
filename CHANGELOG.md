@@ -9,6 +9,8 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- `whoami` returns `account_url`, the page where a member sees and revokes
+  connected apps and tokens.
 - `get_space`: details of one space, with its member count and your role.
 - `duplicate_page`: copy a page with its child pages, in the same space or
   into another space.
@@ -39,6 +41,11 @@ when upgrading lists it under "Upgrade notes".
 
 - README: a note near the top that the project is independent from
   Docmost, Inc. and that Docmost is their trademark.
+
+### Fixed
+
+- The account and consent pages leave space between the scopes box and the
+  button below it.
 
 ## [1.0.2] - 2026-10-25
 
