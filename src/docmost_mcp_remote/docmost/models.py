@@ -94,6 +94,7 @@ class PageSummary(_PageBase):
     position: str | None = None
     has_children: bool | None = Field(default=None, alias="hasChildren")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
+    last_updated_by_id: str | None = Field(default=None, alias="lastUpdatedById")
     deleted_at: datetime | None = Field(default=None, alias="deletedAt")
 
 
