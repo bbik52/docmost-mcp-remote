@@ -31,7 +31,9 @@ Release artifacts are not signed yet (ADR 0006).
 - **Glama**: claim the server on <https://glama.ai/mcp/servers> with the
   GitHub account named in `glama.json`. In its admin Dockerfile settings use
   Python 3.13, the build steps `["pip install ."]` and the CMD arguments
-  `["docmost-mcp-remote", "--tool-catalog"]`, with no environment variables:
+  `["python", "-m", "docmost_mcp_remote", "--tool-catalog"]`, with no
+  environment variables (Glama refuses a command containing `mcp-remote`,
+  mistaking it for the npm proxy of that name):
   the catalog mode lists the tools without Docmost or a database.
 
 ## Cutting a release
