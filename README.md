@@ -94,6 +94,8 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `list_space_members` | read | Users and groups with a role in a space |
 | `list_workspace_members` | read | People in the workspace, with their role |
 | `list_groups` | read | Groups of the workspace |
+| `list_group_members` | read | People in a group |
+| `list_invitations` | read | Pending invitations to the workspace |
 | `diff_page` | read | Unified diff between the current body, a saved version or a snapshot |
 | `list_backlinks` | read | Pages that link to a page, or that a page links to (Docmost 0.90+) |
 | `list_labels` | read | Labels of the workspace or of one page (Docmost 0.90+) |
@@ -123,6 +125,16 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `update_space` | admin | Change a space's name, slug or description |
 | `add_space_members` | admin | Give users (by email) and groups (by name) a role in a space |
 | `change_space_member_role` | admin | Change the role of a user or group in a space |
+| `create_group`, `update_group` | admin | Create a group, optionally with members; rename it or change its description |
+| `add_group_members` | admin | Add people to a group |
+| `invite_people` | admin | Invite people by email, with a workspace role and groups; existing members and pending invitations are skipped |
+| `resend_invitation`, `revoke_invitation` | admin | Send an invitation again or cancel it |
+| `change_workspace_role` | admin | Make someone a member, admin or owner of the workspace |
+| `deactivate_member`, `activate_member` | admin | Stop someone from signing in, keeping their account, or let them back in |
+
+People cannot be removed from the workspace or from groups, and groups cannot
+be deleted. Docmost has no way to create an account or edit someone else's
+profile: people join through an invitation and set their own password.
 
 Page bodies, comments and snippets are returned inside a
 `<docmost-untrusted-content>` envelope so the model treats them as data.

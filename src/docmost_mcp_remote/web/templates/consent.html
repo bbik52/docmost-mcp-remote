@@ -12,7 +12,7 @@
     <label class="check"><input type="checkbox" checked disabled> read: read pages, comments and search</label>
     {% if "write" in requested %}<label class="check"><input type="checkbox" name="scope" value="write"> write: create and edit pages and comments</label>{% endif %}
     {% if "delete" in requested %}<label class="check"><input type="checkbox" name="scope" value="delete"> delete: move pages to Trash and restore them</label>{% endif %}
-    {% if "admin" in requested %}<label class="check"><input type="checkbox" name="scope" value="admin"> admin: create and change spaces and give people roles in them</label>{% endif %}
+    {% if "admin" in requested %}<label class="check"><input type="checkbox" name="scope" value="admin"> admin: manage spaces, groups and people (invite, change roles, deactivate)</label>{% endif %}
   </fieldset>
   <p class="muted">Page content can contain instructions aimed at the AI. Grant write, delete and admin only to apps you trust. You can revoke access on your <a href="/account">account page</a>.</p>
   <div class="row">
