@@ -149,9 +149,8 @@ def test_copy_and_move_between_spaces(server: RunningServer, token: str) -> None
     assert f"Final {unique}" in comments[0]["text"]
 
 
-def test_section_edit(server: RunningServer) -> None:
+def test_section_edit(server: RunningServer, token: str) -> None:
     unique = uuid.uuid4().hex[:10]
-    token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
     general = next(
         space["id"]
         for space in server.call(token, "list_spaces")["spaces"]
