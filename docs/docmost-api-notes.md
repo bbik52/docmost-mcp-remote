@@ -151,6 +151,26 @@ CI run. Nothing here is copied from Docmost or from other clients.
   videos and PDFs (turned into links), image size and alignment; a table
   without a header row gets an empty one, or becomes plain text.
 
+## Exports
+
+- `pages/export` takes `pageId`, `format` (`markdown` or `html`),
+  `includeChildren` and `includeAttachments`; it answers a file with
+  `Content-Disposition`: the page alone as `.md` or `.html`, otherwise a zip.
+  `spaces/export` takes `spaceId`, `format` and `includeAttachments` and
+  needs admin rights in the space (403 for writers). Both exist since 0.70.
+
+## Attachments
+
+- `files/upload` is a multipart form with `pageId` and `file`; it answers
+  the attachment. It does not add the file to the page body: the editor adds
+  an `image` node (`src`, `attachmentId`, `size`) or an `attachment` node
+  (`url`, `name`, `mime`, `size`, `attachmentId`) pointing to
+  `/api/files/<id>/<name>`.
+- `files/info` takes `attachmentId`. `pages/attachments` (0.96 or newer)
+  lists a page's files, paginated.
+- `GET /api/files/<id>/<name>` serves the file to a signed-in member; the
+  name part is not checked.
+
 ## Search filters
 
 - `search` accepts `creatorId` since 0.70, and `titleOnly` and `labelIds`

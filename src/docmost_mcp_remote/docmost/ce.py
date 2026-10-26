@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote, unquote
 
 import httpx
 
+from docmost_mcp_remote.docmost.downloads import Download
 from docmost_mcp_remote.docmost.errors import (
     DocmostAuthError,
     DocmostBadRequestError,
@@ -25,11 +28,13 @@ from docmost_mcp_remote.docmost.errors import (
 )
 from docmost_mcp_remote.docmost.links import mark_internal_links
 from docmost_mcp_remote.docmost.models import (
+    Attachment,
     BacklinkDirection,
     BodyOperation,
     Comment,
     CopiedPage,
     CurrentUser,
+    ExportFormat,
     Group,
     HistoryEntry,
     HistoryVersion,
@@ -54,6 +59,14 @@ logger = logging.getLogger(__name__)
 MAX_PAGE_SIZE = 100
 _DEFAULT_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 _DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+#: Docmost builds an export before it sends the first byte.
+_DOWNLOAD_TIMEOUT = httpx.Timeout(300.0, connect=5.0)
+_FILE_NAME = re.compile(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', re.IGNORECASE)
+
+
+def _file_name(disposition: str | None) -> str | None:
+    match = _FILE_NAME.search(disposition or "")
+    return unquote(match.group(1)) if match else None
 
 
 def _limit(value: int) -> int:
@@ -118,16 +131,69 @@ class CeDocmostClient:
     def session(self, token: str) -> CeDocmostSession:
         return CeDocmostSession(self, token)
 
-    async def call(self, path: str, body: dict[str, Any], token: str) -> Any:
-        """POST to ``/api/<path>`` and return the ``data`` member of the answer."""
-        payload = (await self._send(path, body, token)).json()
+    async def call(
+        self,
+        path: str,
+        body: dict[str, Any],
+        token: str,
+        *,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> Any:
+        """POST to ``/api/<path>`` and return the ``data`` member of the answer.
+
+        With ``files`` the body is sent as a multipart form instead of JSON.
+        """
+        payload = (await self._send(path, body, token, files=files)).json()
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
         return payload
 
-    async def _send(self, path: str, body: dict[str, Any], token: str | None) -> _Reply:
+    async def open(
+        self, method: str, path: str, token: str, body: dict[str, Any] | None = None
+    ) -> Download:
+        """Start reading a file from Docmost without holding it in memory."""
+        headers = {"authorization": f"Bearer {token}", "accept": "*/*"}
+        request = self._http.build_request(
+            method, path, json=body, headers=headers, timeout=_DOWNLOAD_TIMEOUT
+        )
+        try:
+            response = await self._http.send(request, stream=True)
+        except httpx.TimeoutException:
+            raise DocmostUnavailableError(f"Docmost timed out on {path}") from None
+        except httpx.HTTPError as exc:
+            raise DocmostUnavailableError(
+                f"Docmost is not reachable: {type(exc).__name__}"
+            ) from None
+        if response.status_code >= 400:
+            try:
+                content = await self._read_limited(response, path)
+            finally:
+                await response.aclose()
+            _Reply(response.status_code, "", {}, content).raise_for_status(path)
+        declared = response.headers.get("content-length")
+        return Download(
+            content_type=response.headers.get("content-type", "application/octet-stream"),
+            file_name=_file_name(response.headers.get("content-disposition")),
+            size=int(declared) if declared and declared.isdigit() else None,
+            chunks=response.aiter_bytes(),
+            close=response.aclose,
+        )
+
+    async def _send(
+        self,
+        path: str,
+        body: dict[str, Any],
+        token: str | None,
+        *,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> _Reply:
         headers = {"authorization": f"Bearer {token}"} if token else {}
-        request = self._http.build_request("POST", path, json=body, headers=headers)
+        if files is None:
+            request = self._http.build_request("POST", path, json=body, headers=headers)
+        else:
+            request = self._http.build_request(
+                "POST", path, data=body, files=files, headers=headers
+            )
         try:
             response = await self._http.send(request, stream=True)
         except httpx.TimeoutException:
@@ -555,3 +621,53 @@ class CeDocmostSession:
 
     async def restore_from_trash(self, page_id: str) -> None:
         await self._call("pages/restore", {"pageId": page_id})
+
+    async def export_page(
+        self,
+        page_id: str,
+        format: ExportFormat,
+        *,
+        include_children: bool = False,
+        include_attachments: bool = False,
+    ) -> Download:
+        body: dict[str, Any] = {"pageId": page_id, "format": format}
+        if include_children:
+            body["includeChildren"] = True
+        if include_attachments:
+            body["includeAttachments"] = True
+        return await self._client.open("POST", "pages/export", self._token, body)
+
+    async def export_space(
+        self, space_id: str, format: ExportFormat, *, include_attachments: bool = False
+    ) -> Download:
+        body: dict[str, Any] = {"spaceId": space_id, "format": format}
+        if include_attachments:
+            body["includeAttachments"] = True
+        return await self._client.open("POST", "spaces/export", self._token, body)
+
+    async def attachment_info(self, attachment_id: str) -> Attachment:
+        data = await self._call("files/info", {"attachmentId": attachment_id})
+        return Attachment.model_validate(data)
+
+    async def page_attachments(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Attachment]:
+        data = await self._call(
+            "pages/attachments", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Attachment.model_validate(item) for item in _items(data)])
+
+    async def download_attachment(self, attachment_id: str, file_name: str) -> Download:
+        path = f"files/{quote(attachment_id, safe='')}/{quote(file_name, safe='')}"
+        return await self._client.open("GET", path, self._token)
+
+    async def upload_attachment(
+        self, page_id: str, file_name: str, content: bytes, mime_type: str
+    ) -> Attachment:
+        data = await self._client.call(
+            "files/upload",
+            {"pageId": page_id},
+            self._token,
+            files={"file": (file_name, content, mime_type)},
+        )
+        return Attachment.model_validate(data)
