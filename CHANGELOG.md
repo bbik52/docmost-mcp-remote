@@ -24,6 +24,11 @@ when upgrading lists it under "Upgrade notes".
 - README: screenshots show the `admin` scope; the download links, the
   `WEB_SESSION_HOURS` setting and the Docmost version `list_attachments`
   needs are documented.
+- Writes that rewrite a whole page body (`update_page` replace,
+  `replace_section`, `replace_page_json`, `restore_snapshot`,
+  `restore_page_version`, `upload_attachment` adding the file) are refused
+  while someone else is editing the page: when another person saved it less
+  than a minute ago. Appending and prepending still work.
 - Resource reads share the tool call rate limit and are written to the audit
   log as `read_resource`.
 

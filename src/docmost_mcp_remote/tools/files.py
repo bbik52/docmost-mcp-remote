@@ -332,7 +332,7 @@ def register(
             updated = {**document, "type": "doc", "content": [*body, file_node(item)]}
             try:
                 snapshot_id, _ = await write_document(
-                    backend, snapshots, member_id, found, updated, "upload_attachment"
+                    backend, snapshots, members, member_id, found, updated, "upload_attachment"
                 )
             except ToolError as exc:
                 result["warning"] = f"The file was uploaded but not added to the page: {exc}"
