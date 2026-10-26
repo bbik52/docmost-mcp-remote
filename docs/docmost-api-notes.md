@@ -156,6 +156,8 @@ CI run. Nothing here is copied from Docmost or from other clients.
 - `pages/export` takes `pageId`, `format` (`markdown` or `html`),
   `includeChildren` and `includeAttachments`; it answers a file with
   `Content-Disposition`: the page alone as `.md` or `.html`, otherwise a zip.
+  0.70 sends a zip even for a single page, with the page file and a
+  `metadata.json`; the server unpacks the page file.
   `spaces/export` takes `spaceId`, `format` and `includeAttachments` and
   needs admin rights in the space (403 for writers). Both exist since 0.70.
 

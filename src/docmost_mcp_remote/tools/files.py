@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import base64
 import binascii
+import io
 import mimetypes
+import zipfile
 from typing import Annotated, Any
 from urllib.parse import quote
 
@@ -66,6 +68,25 @@ def _attachment(item: Attachment) -> dict[str, Any]:
 def _is_text(mime_type: str | None) -> bool:
     kind = (mime_type or "").split(";", 1)[0].strip().lower()
     return kind.startswith("text/") or kind in _TEXT_TYPES
+
+
+def single_page(data: bytes, file_name: str | None) -> tuple[bytes, str | None] | None:
+    """The page file of an export; None when the export holds more than one page.
+
+    Docmost 0.70 answers even a single page with a zip that also holds a
+    metadata file; later releases send the page file itself.
+    """
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        return data, file_name
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        pages = [
+            info
+            for info in archive.infolist()
+            if not info.is_dir() and info.filename.lower().endswith((".md", ".html"))
+        ]
+        if len(pages) != 1:
+            return None
+        return archive.read(pages[0]), pages[0].filename.rsplit("/", 1)[-1]
 
 
 def file_node(item: Attachment) -> dict[str, Any]:
@@ -135,11 +156,12 @@ def register(
                     data = await exported.read(settings.max_page_chars * 4)
                 except DocmostResponseTooLargeError:
                     data = None
-                text = data.decode("utf-8", errors="replace") if data is not None else None
-                if text is not None and len(text) <= settings.max_page_chars:
+                page_file = single_page(data, exported.file_name) if data is not None else None
+                text = page_file[0].decode("utf-8", errors="replace") if page_file else None
+                if page_file and text is not None and len(text) <= settings.max_page_chars:
                     return {
                         **base,
-                        "file_name": exported.file_name,
+                        "file_name": page_file[1],
                         "notice": NOTICE,
                         "content": wrap(text, source=f"page {found.id} export"),
                     }

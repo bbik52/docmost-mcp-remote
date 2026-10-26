@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
+import zipfile
 from collections.abc import Iterator
 from typing import Any
 
@@ -11,6 +13,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from docmost_mcp_remote.tools.files import single_page
 from docmost_mcp_remote.web import downloads
 from tests.fakes import error, ok
 from tests.harness import RunningServer
@@ -202,3 +205,18 @@ def test_access_log_hides_download_links() -> None:
     )
     downloads.RedactDownloadLinks().filter(record)
     assert record.getMessage() == '1.2.3.4 "GET /downloads/[redacted]"'
+
+
+def _zip(**files: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name.replace("_", "."), content)
+    return buffer.getvalue()
+
+
+def test_single_page_from_an_old_docmost_zip() -> None:
+    assert single_page(b"# Plain", "Guide.md") == (b"# Plain", "Guide.md")
+    old = _zip(Guide_md=b"# Guide", metadata_json=b"{}")
+    assert single_page(old, "Guide.zip") == (b"# Guide", "Guide.md")
+    assert single_page(_zip(Guide_md=b"a", Child_md=b"b"), "Guide.zip") is None
