@@ -6,7 +6,6 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.harness import RunningServer
 from tests.integration.conftest import DOCMOST_URL, MEMBER
@@ -14,15 +13,21 @@ from tests.integration.conftest import DOCMOST_URL, MEMBER
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
-def server(engine: AsyncEngine, tokens: dict[str, str]) -> Iterator[RunningServer]:
+@pytest.fixture(scope="module")
+def server(migrated_database: str, tokens: dict[str, str]) -> Iterator[RunningServer]:
+    # One server and one sign-in for the whole module: Docmost allows about ten
+    # sign-ins per minute.
     with RunningServer(docmost_url=DOCMOST_URL, docmost_allow_insecure_http=True) as running:
         yield running
 
 
-def test_write_tools(server: RunningServer) -> None:
+@pytest.fixture(scope="module")
+def token(server: RunningServer) -> str:
+    return server.token(scopes=("write", "delete"), email=MEMBER[0], password=MEMBER[1])
+
+
+def test_write_tools(server: RunningServer, token: str) -> None:
     unique = uuid.uuid4().hex[:10]
-    token = server.token(scopes=("write", "delete"), email=MEMBER[0], password=MEMBER[1])
     spaces = server.call(token, "list_spaces")["spaces"]
     general = next(space["id"] for space in spaces if space["slug"] == "general")
 
@@ -106,9 +111,8 @@ def test_write_tools(server: RunningServer) -> None:
     assert server.call(token, "get_page", {"page": sibling["id"]})["in_trash"] is False
 
 
-def test_copy_and_move_between_spaces(server: RunningServer) -> None:
+def test_copy_and_move_between_spaces(server: RunningServer, token: str) -> None:
     unique = uuid.uuid4().hex[:10]
-    token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
     spaces = {space["slug"]: space["id"] for space in server.call(token, "list_spaces")["spaces"]}
     general, other = spaces["general"], spaces["other"]
     assert server.call(token, "get_space", {"space_id": other})["your_role"] == "writer"
