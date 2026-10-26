@@ -20,6 +20,7 @@ from tests.conftest import make_settings
 
 _CSRF = re.compile(r'name="csrf" value="([^"]+)"')
 _TOKEN = re.compile(r"dmr_[A-Za-z0-9_-]+")
+SIGN_IN_TIMEOUT = 60.0
 
 
 def _free_port() -> int:
@@ -59,7 +60,9 @@ class RunningServer:
         password: str = "pw",
     ) -> str:
         """Sign in through the web form and create a personal token."""
-        with httpx.Client(base_url=self.url) as web:
+        # Sign-in asks Docmost for its version, which Docmost checks against
+        # GitHub; that can take longer than httpx's default five seconds.
+        with httpx.Client(base_url=self.url, timeout=SIGN_IN_TIMEOUT) as web:
             csrf = _CSRF.search(web.get("/login").text)
             assert csrf
             web.post("/login", data={"csrf": csrf.group(1), "email": email, "password": password})
