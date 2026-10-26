@@ -549,6 +549,11 @@ docker build -t ghcr.io/bbik52/docmost-mcp-remote:dev .
 IMAGE_TAG=dev docker compose up -d
 ```
 
+`docmost-mcp-remote --tool-catalog` отдаёт инструменты, ресурсы и промпты по
+stdio без Docmost, базы данных и каких-либо настроек и отклоняет любой вызов.
+Через этот режим каталоги MCP узнают, что умеет сервер, например
+`docker run -i --rm ghcr.io/bbik52/docmost-mcp-remote --tool-catalog`.
+
 См. [CONTRIBUTING.md](CONTRIBUTING.md) и [план развития](docs/ROADMAP.md)
 (на английском).
 

@@ -38,10 +38,14 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("read"),
     )
     async def suggest(
-        query: Annotated[str, Field(min_length=1, max_length=100)],
-        pages: bool = True,
-        people: bool = False,
-        groups: bool = False,
+        query: Annotated[
+            str, Field(min_length=1, max_length=100, description="Start of or part of a name.")
+        ],
+        pages: Annotated[bool, Field(description="Look for pages by title.")] = True,
+        people: Annotated[
+            bool, Field(description="Also look for people by name or email.")
+        ] = False,
+        groups: Annotated[bool, Field(description="Also look for groups by name.")] = False,
         space_id: Annotated[str | None, Field(description="Only pages in this space.")] = None,
         limit: Annotated[int, Field(ge=1, le=25, description="Matches of each kind.")] = 10,
     ) -> dict[str, Any]:
@@ -88,8 +92,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         root_page_id: Annotated[
             str | None, Field(description="Start below this page instead of the space's top.")
         ] = None,
-        max_depth: Annotated[int, Field(ge=1, le=10)] = 3,
-        max_pages: Annotated[int, Field(ge=1, le=1000)] = 300,
+        max_depth: Annotated[int, Field(ge=1, le=10, description="Levels to walk down.")] = 3,
+        max_pages: Annotated[
+            int, Field(ge=1, le=1000, description="Stop after listing this many pages.")
+        ] = 300,
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             await policy.check(backend, space_id)

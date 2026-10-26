@@ -111,3 +111,27 @@ class ToolGuard(Middleware):
             raise
         await record("error" if getattr(result, "is_error", False) else "ok")
         return result
+
+
+CATALOG_NOTE = (
+    "This instance only lists the tools. Deploy docmost-mcp-remote next to your Docmost "
+    "and connect to it to use them: https://github.com/bbik52/docmost-mcp-remote"
+)
+
+
+class CatalogOnly(Middleware):
+    """Answers every tool call and resource read of the catalog with how to deploy."""
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        raise ToolError(CATALOG_NOTE)
+
+    async def on_read_resource(
+        self,
+        context: MiddlewareContext[mt.ReadResourceRequestParams],
+        call_next: CallNext[mt.ReadResourceRequestParams, ResourceResult],
+    ) -> ResourceResult:
+        raise ResourceError(CATALOG_NOTE)

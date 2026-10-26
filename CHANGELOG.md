@@ -40,6 +40,10 @@ when upgrading lists it under "Upgrade notes".
   `UPLOAD_MAX_MB`, default 50). `get_upload_status` reports what happened.
 - `upload_attachment` and upload links can put files at the end of a section
   (`after_heading`) or after a paragraph (`after_text`), not only at the end.
+- `docmost-mcp-remote --tool-catalog` lists the tools, resources and prompts
+  over stdio without Docmost, a database or configuration, for MCP
+  directories such as Glama, which start a server to see what it offers.
+  `glama.json` names the maintainer there.
 - Pages can also be given as the last part of their URL
   (`getting-started-a1B2c3D4e5`).
 

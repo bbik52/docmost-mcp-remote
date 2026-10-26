@@ -37,8 +37,11 @@ MAX_INVITES = 20
 GroupRef = Annotated[str, Field(description="Group name or id from list_groups.")]
 UserRef = Annotated[str, Field(description="The person's email or user id.")]
 Users = Annotated[list[str], Field(min_length=1, max_length=50, description="Emails or user ids.")]
-GroupName = Annotated[str, Field(min_length=2, max_length=100)]
-Description = Annotated[str, Field(max_length=500)]
+GroupName = Annotated[str, Field(min_length=2, max_length=100, description="Group name.")]
+Description = Annotated[str | None, Field(max_length=500, description="Short description.")]
+NewGroupName = Annotated[
+    str | None, Field(min_length=2, max_length=100, description="New name; left out keeps it.")
+]
 Email = Annotated[str, Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
 InvitationId = Annotated[str, Field(description="Invitation id from list_invitations.")]
 
@@ -96,8 +99,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     )
     async def create_group(
         name: GroupName,
-        description: Description | None = None,
-        users: Annotated[list[str] | None, Field(max_length=50)] = None,
+        description: Description = None,
+        users: Annotated[
+            list[str] | None, Field(max_length=50, description="First members: emails or user ids.")
+        ] = None,
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             user_ids = await _user_ids(backend, users or [])
@@ -113,7 +118,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("admin"),
     )
     async def update_group(
-        group: GroupRef, name: GroupName | None = None, description: Description | None = None
+        group: GroupRef, name: NewGroupName = None, description: Description = None
     ) -> dict[str, Any]:
         if name is None and description is None:
             raise ToolError("Give name or description.")
@@ -152,7 +157,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("read"),
     )
     async def list_invitations(
-        query: Annotated[str | None, Field(max_length=100)] = None,
+        query: Annotated[
+            str | None, Field(max_length=100, description="Part of an email to filter by.")
+        ] = None,
         cursor: Cursor = None,
         limit: Limit = 50,
     ) -> dict[str, Any]:
@@ -178,9 +185,15 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("admin"),
     )
     async def invite_people(
-        emails: Annotated[list[Email], Field(min_length=1, max_length=MAX_INVITES)],
+        emails: Annotated[
+            list[Email],
+            Field(min_length=1, max_length=MAX_INVITES, description="Email addresses to invite."),
+        ],
         role: Annotated[InviteRole, Field(description="member or admin.")] = "member",
-        groups: Annotated[list[str] | None, Field(max_length=25)] = None,
+        groups: Annotated[
+            list[str] | None,
+            Field(max_length=25, description="Groups to join on sign-up: names or group ids."),
+        ] = None,
     ) -> dict[str, Any] | mt.InputRequiredResult:
         wanted = list(dict.fromkeys(email.strip().lower() for email in emails))
 
@@ -218,7 +231,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
 
     @mcp.tool(
         name="resend_invitation",
-        description="Send an invitation email again. Needs a workspace admin or owner.",
+        description=(
+            "Send an invitation email again, for someone who did not get it or lost it. Needs a "
+            "workspace admin or owner."
+        ),
         annotations=_INVITE,
         auth=require_scopes("admin"),
     )
@@ -296,7 +312,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
 
     @mcp.tool(
         name="activate_member",
-        description=("Let a deactivated person sign in again. Needs a workspace admin or owner."),
+        description=(
+            "Let a person deactivated with deactivate_member sign in again, with their roles as "
+            "before. Needs a workspace admin or owner."
+        ),
         annotations=_ADMIN,
         auth=require_scopes("admin"),
     )

@@ -27,7 +27,7 @@ from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store
 from docmost_mcp_remote.db.upload_store import UploadStore
 from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostError
-from docmost_mcp_remote.guard import ToolGuard
+from docmost_mcp_remote.guard import CatalogOnly, ToolGuard
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.oauth import DocmostOAuthProvider
 from docmost_mcp_remote.tools import (
@@ -102,12 +102,33 @@ def create_docmost_client(settings: Settings) -> CeDocmostClient:
     )
 
 
+def create_catalog_server() -> FastMCP:
+    """The server's tools, resources and prompts without Docmost, a database or sign-in.
+
+    For MCP directories that start a server to list what it offers: it needs no
+    configuration, runs over stdio and refuses every call.
+    """
+    settings = Settings(
+        public_url="http://localhost:8000",
+        docmost_url="https://docmost.example.com",
+        database_url="postgresql://catalog@localhost/catalog",
+        secret_key="catalog-only-" + "x" * 32,
+        _env_file=None,
+    )
+    return create_server(settings, catalog=True)
+
+
 def create_server(
     settings: Settings,
     docmost: DocmostClient | None = None,
     engine: AsyncEngine | None = None,
+    *,
+    catalog: bool = False,
 ) -> FastMCP:
-    """Build the MCP server with its web pages and tools."""
+    """Build the MCP server with its web pages and tools.
+
+    With ``catalog`` it only describes itself; see ``create_catalog_server``.
+    """
     client = docmost or create_docmost_client(settings)
     database_url = settings.database_url.get_secret_value()
     db = engine or create_engine(database_url)
@@ -152,11 +173,14 @@ def create_server(
         instructions=INSTRUCTIONS,
         version=__version__,
         website_url="https://github.com/bbik52/docmost-mcp-remote",
-        auth=DocmostOAuthProvider(settings, store, oauth),
+        auth=None if catalog else DocmostOAuthProvider(settings, store, oauth),
         mask_error_details=True,
-        lifespan=lifespan,
+        lifespan=None if catalog else lifespan,
     )
-    mcp.add_middleware(ToolGuard(audit, settings.tool_calls_per_minute))
+    if catalog:
+        mcp.add_middleware(CatalogOnly())
+    else:
+        mcp.add_middleware(ToolGuard(audit, settings.tool_calls_per_minute))
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(_: Request) -> Response:

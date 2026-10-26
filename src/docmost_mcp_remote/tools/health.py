@@ -110,7 +110,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         stale_days: Annotated[
             int, Field(ge=1, le=3650, description="Pages older than this count as stale.")
         ] = 180,
-        max_pages: Annotated[int, Field(ge=1, le=1000)] = 300,
+        max_pages: Annotated[
+            int, Field(ge=1, le=1000, description="Check at most this many pages, newest first.")
+        ] = 300,
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             await policy.check(backend, space_id)

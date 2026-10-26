@@ -28,10 +28,17 @@ Release artifacts are not signed yet (ADR 0006).
 - **Repository**: description and topics `mcp`, `mcp-server`, `docmost`,
   `model-context-protocol`, `oauth`, `wiki`, `self-hosted`; branch protection
   as described in DESIGN.md, "Contributions and project security".
+- **Glama**: claim the server on <https://glama.ai/mcp/servers> with the
+  GitHub account named in `glama.json`. In its admin Dockerfile settings use
+  Python 3.13, the build steps `["pip install ."]` and the CMD arguments
+  `["docmost-mcp-remote", "--tool-catalog"]`, with no environment variables:
+  the catalog mode lists the tools without Docmost or a database.
 
 ## Cutting a release
 
-1. Branch `release/X.Y.Z` from `develop`.
+1. Branch `release/X.Y.Z` from `develop`. Check that the READMEs (both
+   languages), `docs/` and the configuration examples describe what the
+   release changes, and fix them first.
 2. Set the version in `pyproject.toml` and in `server.json` (`version`, the
    PyPI package `version` and the image tag in the OCI `identifier`), then
    run `uv lock`.
@@ -55,6 +62,8 @@ Release artifacts are not signed yet (ADR 0006).
 8. Watch the Release workflow. It refuses a tag that does not match the
    project version, is not on `master` or has no changelog entry.
 9. Merge `master` back into `develop`.
+10. On Glama, open the server's admin Dockerfile page, press Deploy, wait for
+    the test to pass, then Make Release, so Glama lists the new version.
 
 `release.yml` only runs on tags, so a mistake in it shows up at release
 time. When changing it, check that every action reference exists (a pinned

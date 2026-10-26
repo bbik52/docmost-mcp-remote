@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 import pytest
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 from fastmcp.exceptions import ToolError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -56,3 +61,19 @@ def test_expired_docmost_session_is_reported(
     routes["/api/users/me"] = error(401, "Unauthorized")
     with pytest.raises(ToolError, match=r"Sign in again at http://localhost:.*/login"):
         server.call(token, "whoami")
+
+
+async def test_tool_catalog_over_stdio(tmp_path: Path) -> None:
+    transport = StdioTransport(
+        command=sys.executable,
+        args=["-m", "docmost_mcp_remote", "--tool-catalog"],
+        cwd=str(tmp_path),
+        env={"PATH": os.environ.get("PATH", "")},
+    )
+    async with Client(transport) as client:
+        tools = {tool.name for tool in await client.list_tools()}
+        assert {"search", "update_page", "trash_page", "invite_people"} <= tools
+        assert [prompt.name for prompt in await client.list_prompts()]
+        result = await client.call_tool("search", {"query": "x"}, raise_on_error=False)
+        assert result.is_error
+        assert "only lists the tools" in str(result.content[0])
