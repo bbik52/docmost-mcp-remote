@@ -36,6 +36,12 @@ def main() -> None:
     if sys.argv[1:2] == ["--version"]:
         print(__version__)
         return
+    if sys.argv[1:2] == ["--tool-catalog"]:
+        # Over stdio, for MCP directories: lists everything, runs nothing.
+        from docmost_mcp_remote.server import create_catalog_server
+
+        create_catalog_server().run(transport="stdio", show_banner=False)
+        return
     try:
         settings = Settings()
     except ValidationError as exc:

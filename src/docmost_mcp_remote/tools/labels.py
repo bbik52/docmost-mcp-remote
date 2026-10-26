@@ -172,7 +172,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     )
     async def add_labels(
         page: PageRef,
-        labels: Annotated[list[LabelName], Field(min_length=1, max_length=25)],
+        labels: Annotated[
+            list[LabelName], Field(min_length=1, max_length=25, description="Label names to add.")
+        ],
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)

@@ -333,7 +333,8 @@ def register(
         name="create_page",
         description=(
             "Create a page in a space, optionally under a parent page and with a Markdown body. "
-            "Returns the new page's id and link."
+            "Returns the new page's id and link. Each call creates a new page, so do not repeat "
+            "it to retry; to change an existing page use update_page."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
@@ -519,7 +520,9 @@ def register(
 
     @mcp.tool(
         name="rename_page",
-        description="Change the title of a page.",
+        description=(
+            "Change the title of a page; its body and place in the tree stay as they are."
+        ),
         annotations=_WRITE,
         auth=require_scopes("write"),
     )
@@ -660,7 +663,9 @@ def register(
     )
     async def add_comment(
         page: PageRef,
-        text: Annotated[str, Field(min_length=1, max_length=10_000)],
+        text: Annotated[
+            str, Field(min_length=1, max_length=10_000, description="Comment text, plain text.")
+        ],
         reply_to_comment_id: Annotated[
             str | None, Field(description="Id of the comment to reply to.")
         ] = None,
@@ -706,7 +711,9 @@ def register(
     )
     async def update_comment(
         comment_id: Annotated[str, Field(description="Comment id from list_comments.")],
-        text: Annotated[str, Field(min_length=1, max_length=10_000)],
+        text: Annotated[
+            str, Field(min_length=1, max_length=10_000, description="Comment text, plain text.")
+        ],
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             comment = await backend.get_comment(comment_id)
@@ -805,7 +812,8 @@ def register(
         auth=require_scopes("read"),
     )
     async def list_snapshots(
-        page: PageRef, limit: Annotated[int, Field(ge=1, le=100)] = 20
+        page: PageRef,
+        limit: Annotated[int, Field(ge=1, le=100, description="Most snapshots to return.")] = 20,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 

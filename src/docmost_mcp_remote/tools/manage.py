@@ -32,7 +32,7 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 SpaceId = Annotated[str, Field(description="Space id from list_spaces.")]
 Role = Annotated[SpaceRole, Field(description="admin, writer or reader.")]
-SpaceName = Annotated[str, Field(min_length=2, max_length=100)]
+SpaceName = Annotated[str, Field(min_length=2, max_length=100, description="Space name.")]
 Slug = Annotated[
     str,
     Field(
@@ -42,7 +42,19 @@ Slug = Annotated[
         description="Short name used in URLs: letters and digits only.",
     ),
 ]
-Description = Annotated[str, Field(max_length=500)]
+Description = Annotated[str | None, Field(max_length=500, description="Short description.")]
+NewName = Annotated[
+    str | None, Field(min_length=2, max_length=100, description="New name; left out keeps it.")
+]
+NewSlug = Annotated[
+    str | None,
+    Field(
+        min_length=2,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9]+$",
+        description="New short name for URLs, letters and digits; left out keeps it.",
+    ),
+]
 
 
 def _space(space: Space, docmost_base: str) -> dict[str, Any]:
@@ -159,7 +171,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("read"),
     )
     async def list_workspace_members(
-        query: Annotated[str | None, Field(max_length=100)] = None,
+        query: Annotated[
+            str | None, Field(max_length=100, description="Part of a name or email to filter by.")
+        ] = None,
         cursor: Cursor = None,
         limit: Limit = 50,
     ) -> dict[str, Any]:
@@ -179,7 +193,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("read"),
     )
     async def list_groups(
-        query: Annotated[str | None, Field(max_length=100)] = None,
+        query: Annotated[
+            str | None, Field(max_length=100, description="Part of a name or email to filter by.")
+        ] = None,
         cursor: Cursor = None,
         limit: Limit = 50,
     ) -> dict[str, Any]:
@@ -201,7 +217,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         auth=require_scopes("admin"),
     )
     async def create_space(
-        name: SpaceName, slug: Slug, description: Description | None = None
+        name: SpaceName, slug: Slug, description: Description = None
     ) -> dict[str, Any]:
         ensure_slug_allowed(slug)
 
@@ -222,9 +238,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     )
     async def update_space(
         space_id: SpaceId,
-        name: SpaceName | None = None,
-        slug: Slug | None = None,
-        description: Description | None = None,
+        name: NewName = None,
+        slug: NewSlug = None,
+        description: Description = None,
     ) -> dict[str, Any]:
         if name is None and slug is None and description is None:
             raise ToolError("Give at least one of name, slug and description.")
@@ -253,8 +269,12 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     async def add_space_members(
         space_id: SpaceId,
         role: Role,
-        users: Annotated[list[str] | None, Field(max_length=25)] = None,
-        groups: Annotated[list[str] | None, Field(max_length=25)] = None,
+        users: Annotated[
+            list[str] | None, Field(max_length=25, description="Users: emails or user ids.")
+        ] = None,
+        groups: Annotated[
+            list[str] | None, Field(max_length=25, description="Groups: names or group ids.")
+        ] = None,
     ) -> dict[str, Any] | mt.InputRequiredResult:
         users = users or []
         groups = groups or []
@@ -298,8 +318,12 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     async def change_space_member_role(
         space_id: SpaceId,
         role: Role,
-        user: str | None = None,
-        group: str | None = None,
+        user: Annotated[
+            str | None, Field(description="The user's email or id; give user or group.")
+        ] = None,
+        group: Annotated[
+            str | None, Field(description="The group's name or id; give user or group.")
+        ] = None,
     ) -> dict[str, Any] | mt.InputRequiredResult:
         if (user is None) == (group is None):
             raise ToolError("Give either user or group.")

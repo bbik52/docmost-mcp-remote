@@ -126,7 +126,8 @@ def register(
         description=(
             "Export a page as Docmost does, as Markdown or HTML. A single page is returned in "
             "the result; with its child pages or its files, or when it is too long, the result "
-            f"is a download link to a zip that works for {LINK_SECONDS // 60} minutes."
+            f"is a download link to a zip that works for {LINK_SECONDS // 60} minutes. To "
+            "read a page, use get_page; export when the person wants a file."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
@@ -134,8 +135,10 @@ def register(
     async def export_page(
         page: PageRef,
         format: Format = "markdown",
-        include_children: bool = False,
-        include_attachments: bool = False,
+        include_children: Annotated[bool, Field(description="Include child pages (zip).")] = False,
+        include_attachments: Annotated[
+            bool, Field(description="Include the files of the pages (zip).")
+        ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -185,7 +188,9 @@ def register(
     async def export_space(
         space_id: Annotated[str, Field(description="Space id from list_spaces.")],
         format: Format = "markdown",
-        include_attachments: bool = False,
+        include_attachments: Annotated[
+            bool, Field(description="Include the files of the pages.")
+        ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -373,7 +378,9 @@ def register(
     )
     async def upload_attachment(
         page: PageRef,
-        file_name: Annotated[str, Field(min_length=1, max_length=255)],
+        file_name: Annotated[
+            str, Field(min_length=1, max_length=255, description="File name with extension.")
+        ],
         content_base64: Annotated[
             str,
             Field(max_length=(MAX_UPLOAD_BYTES * 4) // 3 + 4, description="The file, base64."),
@@ -381,7 +388,9 @@ def register(
         mime_type: Annotated[
             str | None, Field(description="Guessed from the file name when left out.")
         ] = None,
-        add_to_page: bool = True,
+        add_to_page: Annotated[
+            bool, Field(description="Also show the file in the page body; false only attaches it.")
+        ] = True,
         after_heading: AfterHeading = None,
         after_text: AfterText = None,
     ) -> dict[str, Any]:
