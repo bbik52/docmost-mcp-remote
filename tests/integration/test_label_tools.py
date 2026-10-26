@@ -8,9 +8,9 @@ from collections.abc import Iterator
 
 import pytest
 
-from docmost_mcp_remote.docmost.version import Version, parse_version
+from docmost_mcp_remote.docmost.version import Version
 from tests.harness import RunningServer
-from tests.integration.conftest import DOCMOST_URL, MEMBER
+from tests.integration.conftest import DOCMOST_URL, MEMBER, reported_version
 
 pytestmark = pytest.mark.integration
 
@@ -24,8 +24,8 @@ def server(migrated_database: str, tokens: dict[str, str]) -> Iterator[RunningSe
 @pytest.fixture(scope="module")
 def token(server: RunningServer) -> str:
     token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
-    reported = server.call(token, "whoami")["docmost_version"]
-    if reported is not None and parse_version(reported) < Version(0, 90, 0):
+    version = reported_version(server, token)
+    if version is not None and version < Version(0, 90, 0):
         pytest.skip("labels and backlinks need Docmost 0.90")
     return token
 

@@ -12,9 +12,9 @@ import httpx
 import pytest
 from fastmcp.exceptions import ToolError
 
-from docmost_mcp_remote.docmost.version import Version, parse_version
+from docmost_mcp_remote.docmost.version import Version
 from tests.harness import RunningServer
-from tests.integration.conftest import DOCMOST_URL, MEMBER, OWNER
+from tests.integration.conftest import DOCMOST_URL, MEMBER, OWNER, reported_version
 
 pytestmark = pytest.mark.integration
 
@@ -87,8 +87,8 @@ def test_export_and_attachments(server: RunningServer) -> None:
     )
     assert image["added_to_page"] is True
 
-    reported = server.call(token, "whoami")["docmost_version"]
-    if reported is None or parse_version(reported) >= Version(0, 96, 0):
+    version = reported_version(server, token)
+    if version is None or version >= Version(0, 96, 0):
         listed = server.call(token, "list_attachments", {"page": page})
         assert {item["id"] for item in listed["attachments"]} >= {uploaded["id"], image["id"]}
 
