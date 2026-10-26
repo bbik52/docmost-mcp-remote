@@ -7,8 +7,8 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
-from packaging.version import Version
 
+from docmost_mcp_remote.docmost.version import Version, parse_version
 from tests.harness import RunningServer
 from tests.integration.conftest import DOCMOST_URL, MEMBER
 
@@ -24,7 +24,8 @@ def server(migrated_database: str, tokens: dict[str, str]) -> Iterator[RunningSe
 @pytest.fixture(scope="module")
 def token(server: RunningServer) -> str:
     token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
-    if Version(server.call(token, "whoami")["docmost_version"]) < Version("0.90.0"):
+    reported = server.call(token, "whoami")["docmost_version"]
+    if reported is not None and parse_version(reported) < Version(0, 90, 0):
         pytest.skip("labels and backlinks need Docmost 0.90")
     return token
 
