@@ -109,7 +109,7 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `move_page` | write | Move a page within its space, to the start, the end or after a sibling |
 | `move_page_to_space` | write | Move a page with its children to another space |
 | `duplicate_page` | write | Copy a page with its children, in the same space or into another one |
-| `add_comment` | write | Comment on a page or reply to a comment |
+| `add_comment` | write | Comment on a page or reply to a comment, optionally @-mentioning people, whom Docmost notifies |
 | `update_comment` | write | Change the text of one of your own comments |
 | `add_labels` | write | Add labels to a page (Docmost 0.90+) |
 | `remove_label` | write | Remove a label from a page (Docmost 0.90+) |

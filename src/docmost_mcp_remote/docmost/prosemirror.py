@@ -8,6 +8,7 @@ single newlines become hard breaks.
 from __future__ import annotations
 
 import re
+import uuid
 from typing import Any
 
 
@@ -25,6 +26,35 @@ def text_to_doc(text: str) -> dict[str, Any]:
             {"type": "paragraph", "content": content} if content else {"type": "paragraph"}
         )
     return {"type": "doc", "content": paragraphs}
+
+
+def mention_node(user_id: str, label: str, creator_id: str | None) -> dict[str, Any]:
+    """An @-mention of a person, as Docmost's editor writes it."""
+    attrs: dict[str, Any] = {
+        "id": str(uuid.uuid4()),
+        "label": label,
+        "entityType": "user",
+        "entityId": user_id,
+    }
+    if creator_id:
+        attrs["creatorId"] = creator_id
+    return {"type": "mention", "attrs": attrs}
+
+
+def with_mentions(doc: dict[str, Any], mentions: list[dict[str, Any]]) -> dict[str, Any]:
+    """The document with mention nodes at the start of its first paragraph."""
+    if not mentions:
+        return doc
+    lead: list[dict[str, Any]] = []
+    for node in mentions:
+        lead += [node, {"type": "text", "text": " "}]
+    blocks = list(doc.get("content") or [])
+    first = blocks[0] if blocks else {"type": "paragraph"}
+    if first.get("type") != "paragraph":
+        blocks.insert(0, {"type": "paragraph", "content": lead})
+    else:
+        blocks[0] = {**first, "content": lead + list(first.get("content") or [])}
+    return {**doc, "content": blocks}
 
 
 _BLOCK_TYPES = frozenset(

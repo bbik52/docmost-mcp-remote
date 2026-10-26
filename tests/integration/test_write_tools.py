@@ -100,8 +100,14 @@ def test_write_tools(server: RunningServer, token: str) -> None:
         {"page": page["id"], "text": "Reply", "reply_to_comment_id": comment["id"]},
     )
     assert reply["parent_comment_id"] == comment["id"]
+    mentioned = server.call(
+        token, "add_comment", {"page": page["id"], "text": "Have a look", "mention": ["Owner"]}
+    )
+    assert [person["name"] for person in mentioned["mentioned"]] == ["Owner"]
     comments = server.call(token, "list_comments", {"page_id": page["id"]})["comments"]
     assert f"Hi {unique}" in comments[0]["text"]
+    texts = [item["text"] for item in comments]
+    assert any("@Owner Have a look" in text for text in texts)
 
     server.call(token, "trash_page", {"page": sibling["id"]})
     # Docmost still serves a trashed page by id; get_page says so.

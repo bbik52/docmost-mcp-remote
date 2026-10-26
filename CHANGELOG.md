@@ -20,6 +20,8 @@ when upgrading lists it under "Upgrade notes".
   for a given number of days, empty and untitled pages, pages sharing a title,
   links and @-mentions to pages that are gone or in Trash, and who updated
   most pages.
+- `add_comment` can @-mention people, given by email, name or id; Docmost
+  notifies them.
 - Pages can also be given as the last part of their URL
   (`getting-started-a1B2c3D4e5`).
 

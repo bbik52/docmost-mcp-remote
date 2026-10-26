@@ -192,7 +192,12 @@ class DocmostBackend(Protocol):
     async def get_comment(self, comment_id: str) -> Comment: ...
 
     async def create_comment(
-        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+        self,
+        page_id: str,
+        text: str,
+        *,
+        parent_comment_id: str | None = None,
+        mentions: list[dict[str, Any]] | None = None,
     ) -> Comment: ...
 
     async def update_comment(self, comment_id: str, text: str) -> Comment: ...
