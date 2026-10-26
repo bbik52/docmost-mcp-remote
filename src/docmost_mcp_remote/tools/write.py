@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
+import mcp_types as mt
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
@@ -36,6 +37,7 @@ from docmost_mcp_remote.sections import (
     unified_diff,
 )
 from docmost_mcp_remote.tools.common import as_member, formatting_hint, page_link
+from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, wrap
@@ -708,14 +710,20 @@ def register(
         name="trash_page",
         description=(
             "Move a page and its child pages to the Trash of its space. It can be restored with "
-            "restore_page. This server never deletes pages permanently."
+            "restore_page. This server never deletes pages permanently. Clients that can ask "
+            "the person first do so."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("delete"),
     )
-    async def trash_page(page: PageRef) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    async def trash_page(page: PageRef) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             found = await load_page(backend, page)
+            asked = await confirm(
+                f"Move the page {named(found.title)} and its child pages to the Trash?"
+            )
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.move_to_trash(found.id)
             logger.info("Moved page %s to Trash", found.id)
             return result(found, trashed=True)
