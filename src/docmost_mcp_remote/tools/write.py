@@ -24,6 +24,13 @@ from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
 from docmost_mcp_remote.members import MemberService
+from docmost_mcp_remote.sections import (
+    apply_operation,
+    find_section,
+    outside_kept,
+    replace_section,
+    unified_diff,
+)
 from docmost_mcp_remote.tools.common import as_member, page_link
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
@@ -34,6 +41,7 @@ logger = logging.getLogger(__name__)
 #: Waits between read-backs after a body write, in seconds.
 READ_BACK_DELAYS = (0.1, 0.2, 0.4, 0.8, 1.5)
 MAX_CONTENT_CHARS = 500_000
+MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
 
 _WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
@@ -43,6 +51,7 @@ _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
 PageRef = Annotated[str, Field(description="Page id, slug id or Docmost page URL.")]
 Markdown = Annotated[str, Field(max_length=MAX_CONTENT_CHARS, description="Markdown text.")]
 Title = Annotated[str, Field(min_length=1, max_length=500, description="Page title.")]
+DryRun = Annotated[bool, Field(description="Only show the change as a diff; write nothing.")]
 
 _NO_COLLAB = (
     "This happens when Docmost runs without the Redis of its collaboration service "
@@ -150,6 +159,17 @@ def register(
             content_chars=len(updated.content),
         )
 
+    def preview(page: Page, proposed: str) -> dict[str, Any]:
+        diff, truncated = unified_diff(page.content, proposed, limit=MAX_DIFF_CHARS)
+        return result(
+            page,
+            dry_run=True,
+            changed=proposed.strip() != page.content.strip(),
+            notice=NOTICE,
+            diff=wrap(diff, source=f"page {page.id}"),
+            diff_truncated=truncated,
+        )
+
     @mcp.tool(
         name="create_page",
         description=(
@@ -194,7 +214,8 @@ def register(
             "keep the existing text, comments and formatting. 'replace' rewrites the whole "
             "body and drops comment highlights; read the page first and send the complete new "
             "body. The previous body is saved as a snapshot that restore_snapshot can bring "
-            "back."
+            "back. With dry_run=true nothing is written and the result shows the change as a "
+            "diff. To change one part of a long page, prefer replace_section."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("write"),
@@ -206,14 +227,73 @@ def register(
             Literal["append", "prepend", "replace"],
             Field(description="append: add at the end; prepend: at the start; replace: all."),
         ] = "append",
+        dry_run: DryRun = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
+            if dry_run:
+                return preview(found, apply_operation(found.content, content, operation))
             return await write_body(
                 backend, member_id, found, content, operation, f"update_page:{operation}"
             )
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="replace_section",
+        description=(
+            "Replace one section of a page, found with get_page_outline and read with "
+            "get_section. Pass the section_hash from get_section: if the section changed "
+            "since, nothing is written. By default the heading is kept and content replaces "
+            "what is under it, subsections included; with keep_heading=false content replaces "
+            "the heading too, and an empty content removes the section. The whole body is "
+            "saved as a snapshot first. Comment highlights in the page are dropped, as with "
+            "update_page replace."
+        ),
+        annotations=_OVERWRITE,
+        auth=require_scopes("write"),
+    )
+    async def replace_section_tool(
+        page: PageRef,
+        index: Annotated[int, Field(ge=0, description="Section index from get_page_outline.")],
+        section_hash: Annotated[str, Field(description="section_hash from get_section.")],
+        content: Annotated[
+            str, Field(max_length=MAX_CONTENT_CHARS, description="New Markdown for the section.")
+        ],
+        keep_heading: Annotated[bool, Field(description="Keep the section's heading line.")] = True,
+        dry_run: DryRun = False,
+    ) -> dict[str, Any]:
+        member_id = current_member_id()
+
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await load_page(backend, page)
+            section = find_section(found.content, index)
+            if section is None or section.hash != section_hash:
+                raise ToolError(
+                    "The section changed since you read it, or the index is wrong. Call "
+                    "get_page_outline and get_section again."
+                )
+            new_text = content.strip()
+            if keep_heading and section.level:
+                new_text = f"{section.heading_line}\n\n{new_text}".strip()
+            proposed = replace_section(found.content, section, new_text)
+            if dry_run:
+                return preview(found, proposed)
+            if not proposed.strip():
+                raise ToolError("This would leave the page empty; use update_page instead.")
+            written = await write_body(
+                backend, member_id, found, proposed, "replace", "replace_section"
+            )
+            if written.get("changed"):
+                updated = await backend.get_page(found.id)
+                if not outside_kept(updated.content, found.content, section):
+                    written["warning"] = (
+                        "Docmost also changed text outside the section while converting the "
+                        "Markdown. Compare with the snapshot and restore it if needed."
+                    )
+            return written
 
         return await as_member(members, action)
 

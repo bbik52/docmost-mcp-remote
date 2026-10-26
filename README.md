@@ -78,12 +78,15 @@ password.
 | `list_pages` | read | Page tree of a space, one level at a time |
 | `recent_pages` | read | Recently updated pages |
 | `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
+| `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
+| `get_section` | read | One section of a page, with a hash for `replace_section` |
 | `search` | read | Full-text search with snippets |
 | `list_comments` | read | Comments and replies on a page |
 | `list_trash` | read | Pages in the Trash of a space |
 | `list_snapshots` | read | Snapshots this server saved before your changes to a page |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
-| `update_page` | write | Append, prepend or replace a page body with Markdown |
+| `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
+| `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
 | `rename_page` | write | Change a page title |
 | `move_page` | write | Move a page within its space, to the start, the end or after a sibling |
 | `move_page_to_space` | write | Move a page with its children to another space |

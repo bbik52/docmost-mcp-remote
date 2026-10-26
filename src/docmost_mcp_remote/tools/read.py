@@ -6,6 +6,7 @@ import re
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
 from pydantic import Field
 
@@ -13,6 +14,7 @@ from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import PageSummary
 from docmost_mcp_remote.members import MemberService
+from docmost_mcp_remote.sections import find_section, split_sections
 from docmost_mcp_remote.tools.common import as_member, page_link
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, truncate, wrap
@@ -201,6 +203,76 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "notice": NOTICE,
                 "content": wrap(body, source=f"page {found.id}"),
                 "content_chars": len(found.content),
+                "truncated": truncated,
+            }
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="get_page_outline",
+        description=(
+            "The headings of a page with their level and size, without the body. Use it to "
+            "find a section of a long page, then get_section to read it and replace_section "
+            "to change it. Section 0 is the text before the first heading."
+        ),
+        annotations=_READ_ONLY,
+        auth=require_scopes("read"),
+    )
+    async def get_page_outline(
+        page: Annotated[str, Field(description="Page id, slug id or Docmost page URL.")],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await backend.get_page(page_ref(page))
+            await policy.check(backend, found.space_id)
+            return {
+                "id": found.id,
+                "title": found.title or "(untitled)",
+                "notice": NOTICE,
+                "sections": [
+                    {
+                        "index": section.index,
+                        "level": section.level,
+                        "heading": wrap(section.title, source=f"page {found.id}")
+                        if section.level
+                        else None,
+                        "chars": len(section.text),
+                    }
+                    for section in split_sections(found.content)
+                ],
+                "content_chars": len(found.content),
+            }
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="get_section",
+        description=(
+            "Read one section of a page as Markdown: its heading and everything up to the next "
+            "heading of the same or a higher level, subsections included. Returns section_hash "
+            "for replace_section."
+        ),
+        annotations=_READ_ONLY,
+        auth=require_scopes("read"),
+    )
+    async def get_section(
+        page: Annotated[str, Field(description="Page id, slug id or Docmost page URL.")],
+        index: Annotated[int, Field(ge=0, description="Section index from get_page_outline.")],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await backend.get_page(page_ref(page))
+            await policy.check(backend, found.space_id)
+            section = find_section(found.content, index)
+            if section is None:
+                raise ToolError("No section with this index; call get_page_outline again.")
+            body, truncated = truncate(section.text, settings.max_page_chars)
+            return {
+                "id": found.id,
+                "index": section.index,
+                "level": section.level,
+                "section_hash": section.hash,
+                "notice": NOTICE,
+                "content": wrap(body, source=f"page {found.id}"),
+                "content_chars": len(section.text),
                 "truncated": truncated,
             }
 

@@ -143,3 +143,55 @@ def test_copy_and_move_between_spaces(server: RunningServer) -> None:
     assert "Draft" in edited["previous_text"]
     comments = server.call(token, "list_comments", {"page_id": page["id"]})["comments"]
     assert f"Final {unique}" in comments[0]["text"]
+
+
+def test_section_edit(server: RunningServer) -> None:
+    unique = uuid.uuid4().hex[:10]
+    token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
+    general = next(
+        space["id"]
+        for space in server.call(token, "list_spaces")["spaces"]
+        if space["slug"] == "general"
+    )
+    body = (
+        f"Intro {unique} with **bold** and [a link](https://example.com).\n\n"
+        "## Table\n\n| Name | Value |\n| --- | --- |\n| a | 1 |\n\n"
+        "## Steps\n\n- [ ] first\n- [x] second\n\n```python\nprint('# not a heading')\n```\n\n"
+        "## End\n\nBye."
+    )
+    page = server.call(
+        token, "create_page", {"space_id": general, "title": f"Sections {unique}", "content": body}
+    )
+    outline = server.call(token, "get_page_outline", {"page": page["id"]})["sections"]
+    assert [item["level"] for item in outline] == [0, 2, 2, 2]
+    steps = server.call(token, "get_section", {"page": page["id"], "index": 2})
+    preview = server.call(
+        token,
+        "replace_section",
+        {
+            "page": page["id"],
+            "index": 2,
+            "section_hash": steps["section_hash"],
+            "content": f"Done {unique}.",
+            "dry_run": True,
+        },
+    )
+    assert f"+Done {unique}." in preview["diff"]
+    written = server.call(
+        token,
+        "replace_section",
+        {
+            "page": page["id"],
+            "index": 2,
+            "section_hash": steps["section_hash"],
+            "content": f"Done {unique}.",
+        },
+    )
+    assert written["changed"] is True
+    # Docmost's Markdown round trip keeps the rest of this page as it was.
+    assert "warning" not in written
+    content = server.call(token, "get_page", {"page": page["id"]})["content"]
+    assert f"Done {unique}." in content
+    assert "second" not in content
+    assert "| Name" in content
+    assert "Bye." in content
