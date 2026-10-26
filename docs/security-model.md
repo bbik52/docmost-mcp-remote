@@ -76,6 +76,9 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - **Snapshots keep content** of pages that were later deleted or whose access
   was removed, until the retention period ends. Protect the database and its
   backups like Docmost's own.
+- **Download links are bearer links.** Whoever has one can download that one
+  file as the member until it expires, ten minutes after it was made. Clients
+  show the link to the member; it is not logged.
 - **Rate limits are kept in memory** and reset on restart; run one server
   instance per Docmost.
 - **The reverse proxy is outside this project.** A proxy that forwards plain
