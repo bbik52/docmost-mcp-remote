@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -425,6 +425,41 @@ def test_replace_with_same_body_does_not_write(
     )
     assert data["changed"] is False
     assert docmost.requests("pages/update") == []
+
+
+def _saved(seconds_ago: float, user_id: str, name: str = "Anna") -> dict[str, Any]:
+    at = datetime.now(UTC) - timedelta(seconds=seconds_ago)
+    return {"updatedAt": at.isoformat(), "lastUpdatedBy": {"id": user_id, "name": name}}
+
+
+def test_rewrite_refused_while_someone_else_edits(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"].update(_saved(5, "u1"))
+    replace = {"page": "p1", "content": "Rewritten", "operation": "replace"}
+    with pytest.raises(ToolError, match="Anna saved this page 5 seconds ago"):
+        server.call(token, "update_page", replace)
+    document = text_to_doc("Rewritten")
+    with pytest.raises(ToolError, match="may be editing it right now"):
+        server.call(token, "replace_page_json", {"page": "p1", "document": document})
+    assert docmost.requests("pages/update") == []
+    assert server.call(token, "list_snapshots", {"page": "p1"})["snapshots"] == []
+    # Adding text merges with what they type, and a dry run writes nothing.
+    assert server.call(token, "update_page", {"page": "p1", "content": "More"})["changed"]
+    assert server.call(token, "update_page", {**replace, "dry_run": True})["dry_run"]
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [_saved(5, "docmost-user-1"), _saved(120, "u1"), _saved(-600, "u1")],
+    ids=["own-edit", "a-while-ago", "clock-skew"],
+)
+def test_rewrite_allowed_when_page_is_not_busy(
+    server: RunningServer, token: str, docmost: FakeDocmost, saved: dict[str, Any]
+) -> None:
+    docmost.pages["p1"].update(saved)
+    replace = {"page": "p1", "content": "Rewritten", "operation": "replace"}
+    assert server.call(token, "update_page", replace)["changed"] is True
 
 
 def test_snapshot_failure_blocks_the_write(

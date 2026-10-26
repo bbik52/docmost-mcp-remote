@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
@@ -48,6 +49,9 @@ MAX_CONTENT_CHARS = 500_000
 MAX_JSON_CHARS = 2_000_000
 MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
+#: Seconds after someone else saved a page during which it counts as being edited.
+#: Docmost saves an open editor about every ten seconds while people type.
+BUSY_SECONDS = 60
 
 _WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
 _OVERWRITE = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False}
@@ -87,9 +91,36 @@ async def read_back(backend: DocmostBackend, page_id: str, before: str) -> Page 
     return None
 
 
+async def check_not_busy(members: MemberService, member_id: uuid.UUID, page: Page) -> None:
+    """Refuse to rewrite a page that someone else saved in the last minute.
+
+    A whole-body write replaces the document in the editor too, so what that
+    person types meanwhile would be lost. Appending and prepending merge.
+    """
+    if page.updated_at is None or page.last_updated_by is None:
+        return
+    saved = page.updated_at
+    if saved.tzinfo is None:
+        saved = saved.replace(tzinfo=UTC)
+    age = (datetime.now(UTC) - saved).total_seconds()
+    # Far in the future means the clocks disagree, and then the age says nothing.
+    if not -BUSY_SECONDS < age < BUSY_SECONDS:
+        return
+    if page.last_updated_by.id == await members.docmost_user_id(member_id):
+        return
+    who = page.last_updated_by.name or "Someone"
+    raise ToolError(
+        f"Nothing was written: {who} saved this page {max(int(age), 0)} seconds ago and may "
+        "be editing it right now, and rewriting the body would take away what they type. "
+        f"Try again in a minute, or add text with update_page operation 'append' or "
+        "'prepend', which keeps their changes."
+    )
+
+
 async def write_document(
     backend: DocmostBackend,
     snapshots: SnapshotStore,
+    members: MemberService,
     member_id: uuid.UUID,
     page: Page,
     document: dict[str, Any],
@@ -106,6 +137,7 @@ async def write_document(
         raise ToolError("The document was not written: " + " ".join(problems))
     if len(json.dumps(document)) > MAX_JSON_CHARS:
         raise ToolError(f"The document is larger than {MAX_JSON_CHARS} characters of JSON.")
+    await check_not_busy(members, member_id, page)
     current = await backend.get_page_json(page.id)
     snapshot_id = await snapshots.save(
         member_id=member_id,
@@ -216,6 +248,8 @@ def register(
         operation: BodyOperation,
         reason: str,
     ) -> dict[str, Any]:
+        if operation == "replace":
+            await check_not_busy(members, member_id, page)
         snapshot_id = await snapshots.save(
             member_id=member_id,
             page_id=page.id,
@@ -312,7 +346,8 @@ def register(
             "keep the existing text, comments and formatting. 'replace' rewrites the whole "
             "body; read the page first and send the complete new body. It is refused on pages "
             "with formatting Markdown cannot hold (get_page lists it in markdown_loses); use "
-            "replace_page_json there. The previous body is saved as a snapshot that "
+            "replace_page_json there. 'replace' is also refused while someone else is editing "
+            "the page. The previous body is saved as a snapshot that "
             "restore_snapshot can bring back. With dry_run=true nothing is written and the "
             "result shows the change as a diff. To change one part of a long page, prefer "
             "replace_section."
@@ -354,9 +389,10 @@ def register(
             "format='json' returns it. Unlike Markdown this keeps everything Docmost can show: "
             "colors, merged table cells, columns, diagrams, mentions, comment highlights. "
             "Read the page as JSON first, change it and send the complete document. It is "
-            "checked against Docmost's editor schema before anything is written, and the "
-            "previous body is saved as a snapshot. With dry_run=true nothing is written; the "
-            "result lists any problems and shows the change as a Markdown diff."
+            "checked against Docmost's editor schema before anything is written, refused while "
+            "someone else is editing the page, and the previous body is saved as a snapshot. "
+            "With dry_run=true nothing is written; the result lists any problems and shows "
+            "the change as a Markdown diff."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("write"),
@@ -388,7 +424,7 @@ def register(
                     diff_truncated=truncated,
                 )
             snapshot_id, changed = await write_document(
-                backend, snapshots, member_id, found, document, "replace_page_json"
+                backend, snapshots, members, member_id, found, document, "replace_page_json"
             )
             return result(found, snapshot_id=str(snapshot_id), changed=changed)
 
@@ -765,6 +801,7 @@ def register(
                 saved, changed = await write_document(
                     backend,
                     snapshots,
+                    members,
                     member_id,
                     found,
                     json.loads(snapshot.content),

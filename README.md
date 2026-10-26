@@ -133,6 +133,11 @@ and reports an error if Docmost did not apply it (this happens when Docmost
 runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
 were later deleted in Docmost until they expire.
 
+A change that rewrites the whole body (a replace, a section, a JSON write, a
+restore) is refused while someone else is editing the page, that is when
+another person saved it in the last minute, because their typing would be
+lost. Appending and prepending merge with their edits and are not refused.
+
 ## Resources and prompts
 
 Besides tools, which the model picks itself, the server offers resources and
