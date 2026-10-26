@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from docmost_mcp_remote.docmost.version import Version, parse_version
 from tests.harness import RunningServer
 from tests.integration.conftest import DOCMOST_URL, MEMBER
 
@@ -191,8 +192,12 @@ def test_section_edit(server: RunningServer, token: str) -> None:
         },
     )
     assert written["changed"] is True
-    # Docmost's Markdown round trip keeps the rest of this page as it was.
-    assert "warning" not in written
+    # Since Docmost 0.97 its Markdown round trip keeps the rest of this page as
+    # it was; older versions export the table header as an empty row, which
+    # the server reports.
+    reported = server.call(token, "whoami")["docmost_version"]
+    old = reported is not None and parse_version(reported) < Version(0, 97, 0)
+    assert ("warning" in written) is old
     content = server.call(token, "get_page", {"page": page["id"]})["content"]
     assert f"Done {unique}." in content
     assert "second" not in content

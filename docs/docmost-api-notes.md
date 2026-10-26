@@ -42,6 +42,13 @@ CI run. Nothing here is copied from Docmost or from other clients.
   `cursor: null` is accepted.
 - `search` returns `items` without `meta`.
 
+## Markdown export by version
+
+- Before 0.97, `pages/info` with `format: "markdown"` writes a table's
+  header row as an empty row followed by the header cells as a body row, so
+  a body sent back to Docmost changes its tables. `replace_section` reports
+  this as text changed outside the section.
+
 ## Pages
 
 - `pages/info` with `{"pageId", "format": "markdown"}` returns the body as a
