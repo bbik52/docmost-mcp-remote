@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any, Literal
@@ -45,6 +46,19 @@ _HEADERS = {
 }
 
 Kind = Literal["page_export", "space_export", "attachment"]
+_LINK_IN_PATH = re.compile(r"/downloads/[^/?\s\"]+")
+
+
+class RedactDownloadLinks(logging.Filter):
+    """Keeps download links out of the HTTP access log: a link is a credential."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _LINK_IN_PATH.sub("/downloads/[redacted]", arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
 
 
 class DownloadLinks:

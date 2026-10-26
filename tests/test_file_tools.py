@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -187,3 +188,17 @@ def test_upload_needs_write(server: RunningServer) -> None:
     tools = server.tools(server.token())
     assert "upload_attachment" not in tools
     assert "export_page" in tools
+
+
+def test_access_log_hides_download_links() -> None:
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s "%s %s"',
+        ("1.2.3.4", "GET", "/downloads/abc"),
+        None,
+    )
+    downloads.RedactDownloadLinks().filter(record)
+    assert record.getMessage() == '1.2.3.4 "GET /downloads/[redacted]"'
