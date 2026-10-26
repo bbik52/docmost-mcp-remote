@@ -78,6 +78,19 @@ class Settings(BaseSettings):
         le=3650,
         description="Days an audit log entry is kept before it is deleted.",
     )
+    upload_retention_minutes: int = Field(
+        default=60,
+        ge=5,
+        le=24 * 60,
+        description="Minutes an upload link works; files not added to the page by then are "
+        "deleted from this server.",
+    )
+    upload_max_mb: int = Field(
+        default=50,
+        ge=1,
+        le=1024,
+        description="Largest total size of the files sent to one upload link, in MB.",
+    )
     tool_calls_per_minute: int = Field(
         default=60,
         ge=1,

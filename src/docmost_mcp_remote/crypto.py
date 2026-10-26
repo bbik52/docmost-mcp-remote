@@ -57,11 +57,17 @@ class Cipher:
 
     def encrypt(self, plaintext: str, *, context: str) -> bytes:
         """Encrypt ``plaintext``; ``context`` (for example a member id) must match on decrypt."""
+        return self.encrypt_bytes(plaintext.encode(), context=context)
+
+    def encrypt_bytes(self, data: bytes, *, context: str) -> bytes:
         nonce = secrets.token_bytes(_NONCE_BYTES)
-        sealed = self._current.aead.encrypt(nonce, plaintext.encode(), context.encode())
+        sealed = self._current.aead.encrypt(nonce, data, context.encode())
         return _FORMAT_VERSION + self._current.key_id + nonce + sealed
 
     def decrypt(self, blob: bytes, *, context: str) -> str:
+        return self.decrypt_bytes(blob, context=context).decode()
+
+    def decrypt_bytes(self, blob: bytes, *, context: str) -> bytes:
         if len(blob) < 1 + _KEY_ID_BYTES + _NONCE_BYTES or blob[:1] != _FORMAT_VERSION:
             raise DecryptionError("unknown ciphertext format")
         key_id = blob[1 : 1 + _KEY_ID_BYTES]
@@ -75,7 +81,7 @@ class Cipher:
             )
         except InvalidTag:
             raise DecryptionError("ciphertext failed authentication") from None
-        return plaintext.decode()
+        return plaintext
 
     def needs_rotation(self, blob: bytes) -> bool:
         """True when ``blob`` was made with the previous key and should be re-encrypted."""

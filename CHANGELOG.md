@@ -32,6 +32,14 @@ when upgrading lists it under "Upgrade notes".
   that cannot ask are not blocked.
 - `add_comment` can @-mention people, given by email, name or id; Docmost
   notifies them.
+- `create_upload_link`: a one-time link where the person drops files into a
+  page from the browser, with progress, several files at once and a chosen
+  order, or the assistant sends them with `curl`, without spending tokens.
+  Files wait on this server, encrypted, until Done is pressed, and are deleted
+  when the link expires (`UPLOAD_RETENTION_MINUTES`, default 60;
+  `UPLOAD_MAX_MB`, default 50). `get_upload_status` reports what happened.
+- `upload_attachment` and upload links can put files at the end of a section
+  (`after_heading`) or after a paragraph (`after_text`), not only at the end.
 - Pages can also be given as the last part of their URL
   (`getting-started-a1B2c3D4e5`).
 
