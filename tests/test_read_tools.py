@@ -120,6 +120,7 @@ def restricted(engine: AsyncEngine, mock: Recorder) -> Iterator[RunningServer]:
 
 def test_tool_list(server: RunningServer) -> None:
     assert server.tools(server.token()) == [
+        "check_space_health",
         "diff_page",
         "export_page",
         "export_space",
@@ -131,10 +132,13 @@ def test_tool_list(server: RunningServer) -> None:
         "get_page_version",
         "get_section",
         "get_space",
+        "get_upload_status",
         "list_attachments",
         "list_backlinks",
         "list_comments",
+        "list_group_members",
         "list_groups",
+        "list_invitations",
         "list_labels",
         "list_page_history",
         "list_pages",

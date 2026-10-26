@@ -88,12 +88,22 @@ class Group(_Model):
     is_default: bool | None = Field(default=None, alias="isDefault")
 
 
+class Invitation(_Model):
+    """A pending invitation to the workspace."""
+
+    id: str
+    email: str
+    role: str | None = None
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
 class PageSummary(_PageBase):
     """A page in a list: tree, recent pages or Trash."""
 
     position: str | None = None
     has_children: bool | None = Field(default=None, alias="hasChildren")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
+    last_updated_by_id: str | None = Field(default=None, alias="lastUpdatedById")
     deleted_at: datetime | None = Field(default=None, alias="deletedAt")
 
 
@@ -251,3 +261,5 @@ class Paginated[T](_Model):
 BodyOperation = Literal["append", "prepend", "replace"]
 BacklinkDirection = Literal["incoming", "outgoing"]
 SpaceRole = Literal["admin", "writer", "reader"]
+WorkspaceRole = Literal["owner", "admin", "member"]
+InviteRole = Literal["admin", "member"]

@@ -7,6 +7,68 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-26
+
+### Added
+
+- MCP resources: `docmost://spaces` and `docmost://pages/{page}`, a page as
+  Markdown with its place and link, for clients that let people attach
+  resources. While a title is typed, argument completion offers the member's
+  matching pages, and spaces for `space` arguments.
+- MCP prompts: `summarize_page`, `summarize_space`, `answer_from_wiki` and
+  `whats_new`, and with the `write` scope `draft_page` and `tidy_page`, which
+  ask for confirmation before writing.
+- `check_space_health`: a health check of one space with pages not updated
+  for a given number of days, empty and untitled pages, pages sharing a title,
+  links and @-mentions to pages that are gone or in Trash, and who updated
+  most pages.
+- Workspace people, with the `admin` scope: `create_group`, `update_group`,
+  `add_group_members`, `invite_people`, `resend_invitation`,
+  `revoke_invitation`, `change_workspace_role`, `deactivate_member` and
+  `activate_member`; and with `read`, `list_group_members` and
+  `list_invitations`. Nothing removes people or deletes groups.
+- Risky changes ask the person in their client first, where the client
+  supports MCP elicitation, in both the handshake-era and the 2026-07-28
+  protocol: `trash_page`, `add_space_members`, `change_space_member_role`,
+  `invite_people`, `change_workspace_role` and `deactivate_member`. Clients
+  that cannot ask are not blocked.
+- `add_comment` can @-mention people, given by email, name or id; Docmost
+  notifies them.
+- `create_upload_link`: a one-time link where the person drops files into a
+  page from the browser, with progress, several files at once and a chosen
+  order, or the assistant sends them with `curl`, without spending tokens.
+  Files wait on this server, encrypted, until Done is pressed, and are deleted
+  when the link expires (`UPLOAD_RETENTION_MINUTES`, default 60;
+  `UPLOAD_MAX_MB`, default 50). `get_upload_status` reports what happened.
+- `upload_attachment` and upload links can put files at the end of a section
+  (`after_heading`) or after a paragraph (`after_text`), not only at the end.
+- `docmost-mcp-remote --tool-catalog` lists the tools, resources and prompts
+  over stdio without Docmost, a database or configuration, for MCP
+  directories such as Glama, which start a server to see what it offers.
+  `glama.json` names the maintainer there.
+- Pages can also be given as the last part of their URL
+  (`getting-started-a1B2c3D4e5`).
+
+### Changed
+
+- README, in English and Russian: highlights, a comparison with other Docmost
+  MCP servers, tools grouped and numbered, client setup in collapsible
+  sections, the safety features in one place, and the diagram as an image so
+  that it shows on PyPI and in MCP directories too. Issue forms for bug
+  reports and feature requests.
+- README: screenshots show the `admin` scope; the download links, the
+  `WEB_SESSION_HOURS` setting and the Docmost version `list_attachments`
+  needs are documented.
+- Writes that rewrite a whole page body (`update_page` replace,
+  `replace_section`, `replace_page_json`, `restore_snapshot`,
+  `restore_page_version`, `upload_attachment` adding the file) are refused
+  while someone else is editing the page: when another person saved it less
+  than a minute ago. Appending and prepending still work.
+- The `admin` scope is described as managing spaces, groups and people on the
+  consent and account pages; screenshots updated.
+- Resource reads share the tool call rate limit and are written to the audit
+  log as `read_resource`.
+
 ## [1.1.0] - 2026-10-26
 
 ### Added

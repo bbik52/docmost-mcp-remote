@@ -1,9 +1,10 @@
-"""Exports and attachments.
+"""Exports, attachments and uploads.
 
 A single page is returned in the tool result. Zips (a page with its children
 or files, a whole space) and attachments are offered as a short-lived link to
 this server, which streams them from Docmost as the member: they are too
-large and too binary for a tool result.
+large and too binary for a tool result. Files go the other way through an
+upload link, or, costing many tokens, as base64.
 """
 
 from __future__ import annotations
@@ -11,10 +12,9 @@ from __future__ import annotations
 import base64
 import binascii
 import io
-import mimetypes
+import uuid
 import zipfile
 from typing import Annotated, Any
-from urllib.parse import quote
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -26,14 +26,16 @@ from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend, DocmostResponseTooLargeError
 from docmost_mcp_remote.docmost.models import Attachment, ExportFormat, Page
+from docmost_mcp_remote.docmost.placement import Placement, file_node, insertion_index, place_files
 from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
-from docmost_mcp_remote.tools.common import as_member, require_version
+from docmost_mcp_remote.tools.common import as_member, page_link, require_version
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, wrap
 from docmost_mcp_remote.tools.write import write_document
 from docmost_mcp_remote.web.downloads import LINK_SECONDS, DownloadLinks
+from docmost_mcp_remote.web.uploads import UploadLinks, guess_type, safe_file_name
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
 _WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
@@ -50,6 +52,20 @@ _LINK_NOTE = (
 )
 
 PageRef = Annotated[str, Field(description="Page id, slug id or Docmost page URL.")]
+AfterHeading = Annotated[
+    str | None,
+    Field(
+        max_length=200,
+        description="Put the files at the end of the section under this heading (its text).",
+    ),
+]
+AfterText = Annotated[
+    str | None,
+    Field(
+        max_length=200,
+        description="Put the files right after the paragraph or block containing this text.",
+    ),
+]
 Format = Annotated[ExportFormat, Field(description="markdown or html.")]
 
 
@@ -89,34 +105,16 @@ def single_page(data: bytes, file_name: str | None) -> tuple[bytes, str | None] 
         return archive.read(pages[0]), pages[0].filename.rsplit("/", 1)[-1]
 
 
-def file_node(item: Attachment) -> dict[str, Any]:
-    """The editor node that shows an uploaded file in a page."""
-    src = f"/api/files/{item.id}/{quote(item.file_name)}"
-    if (item.mime_type or "").startswith("image/"):
-        attrs: dict[str, Any] = {"src": src, "attachmentId": item.id, "alt": item.file_name}
-        if item.file_size is not None:
-            attrs["size"] = item.file_size
-        return {"type": "image", "attrs": attrs}
-    return {
-        "type": "attachment",
-        "attrs": {
-            "url": src,
-            "name": item.file_name,
-            "mime": item.mime_type,
-            "size": item.file_size,
-            "attachmentId": item.id,
-        },
-    }
-
-
 def register(
     mcp: FastMCP,
     settings: Settings,
     members: MemberService,
     snapshots: SnapshotStore,
     links: DownloadLinks,
+    uploads: UploadLinks,
 ) -> None:
     policy = SpacePolicy(settings.allowed_spaces)
+    docmost_base = str(settings.docmost_url).rstrip("/")
 
     async def load_page(backend: DocmostBackend, ref: str) -> Page:
         page = await backend.get_page(page_ref(ref))
@@ -128,7 +126,8 @@ def register(
         description=(
             "Export a page as Docmost does, as Markdown or HTML. A single page is returned in "
             "the result; with its child pages or its files, or when it is too long, the result "
-            f"is a download link to a zip that works for {LINK_SECONDS // 60} minutes."
+            f"is a download link to a zip that works for {LINK_SECONDS // 60} minutes. To "
+            "read a page, use get_page; export when the person wants a file."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
@@ -136,8 +135,10 @@ def register(
     async def export_page(
         page: PageRef,
         format: Format = "markdown",
-        include_children: bool = False,
-        include_attachments: bool = False,
+        include_children: Annotated[bool, Field(description="Include child pages (zip).")] = False,
+        include_attachments: Annotated[
+            bool, Field(description="Include the files of the pages (zip).")
+        ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -187,7 +188,9 @@ def register(
     async def export_space(
         space_id: Annotated[str, Field(description="Space id from list_spaces.")],
         format: Format = "markdown",
-        include_attachments: bool = False,
+        include_attachments: Annotated[
+            bool, Field(description="Include the files of the pages.")
+        ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -281,20 +284,103 @@ def register(
 
         return await as_member(members, action)
 
+    def placement_of(after_heading: str | None, after_text: str | None) -> Placement:
+        if after_heading and after_text:
+            raise ToolError("Give after_heading or after_text, not both.")
+        return Placement(after_heading=after_heading or None, after_text=after_text or None)
+
+    async def check_place(backend: DocmostBackend, page: Page, placement: Placement) -> None:
+        if not placement.as_dict():
+            return
+        document = await backend.get_page_json(page.id)
+        body = [node for node in document.get("content") or [] if isinstance(node, dict)]
+        if insertion_index(body, placement) is None:
+            what = "heading" if placement.after_heading else "text"
+            raise ToolError(
+                f"The page has no such {what}; check it with get_page_outline or get_page."
+            )
+
+    @mcp.tool(
+        name="create_upload_link",
+        description=(
+            "Make a link for adding files to a page, and the best way to upload: it costs no "
+            "tokens. Give the link to the person: they open it in a browser, drop in one or "
+            "more files, put them in order and press Done, and the files appear in the page. "
+            "If you can run commands with network access, send files you have yourself with "
+            "the curl command in the result instead of upload_attachment. The link works for "
+            f"{settings.upload_retention_minutes} minutes and takes files of up to "
+            f"{settings.upload_max_mb} MB in total; files not added by then are deleted. "
+            "Anyone with the link can add files to the page until then. Check the outcome "
+            "with get_upload_status."
+        ),
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def create_upload_link(
+        page: PageRef, after_heading: AfterHeading = None, after_text: AfterText = None
+    ) -> dict[str, Any]:
+        member_id = current_member_id()
+        placement = placement_of(after_heading, after_text)
+
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await load_page(backend, page)
+            await check_place(backend, found, placement)
+            created = await uploads.create(
+                member_id, found, page_link(docmost_base, found), placement
+            )
+            return {
+                "page_id": found.id,
+                "title": found.title or "(untitled)",
+                **created,
+                "note": (
+                    "Send upload_url to the person and tell them the files appear in the page "
+                    "when they press Done. Do not share the link with anyone else."
+                ),
+            }
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="get_upload_status",
+        description=(
+            "What happened to an upload link: the files sent to it so far and, once Done was "
+            "pressed, whether they were added to the page."
+        ),
+        annotations=_READ_ONLY,
+        auth=require_scopes("read"),
+    )
+    async def get_upload_status(
+        upload_id: Annotated[str, Field(description="upload_id from create_upload_link.")],
+    ) -> dict[str, Any]:
+        member_id = current_member_id()
+        try:
+            link_id = uuid.UUID(upload_id)
+        except ValueError:
+            raise ToolError("Unknown upload_id.") from None
+        found = await uploads.status(member_id, link_id)
+        if found is None:
+            raise ToolError("Unknown upload_id, or the link has expired.")
+        return found
+
     @mcp.tool(
         name="upload_attachment",
         description=(
             "Upload a file to a page, given as base64, up to "
-            f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB. By default it is also added at the end "
-            "of the page: images are shown, other files appear as a download block. Adding "
-            "it saves a snapshot of the body first."
+            f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB. Base64 costs about a million tokens "
+            "per megabyte, so prefer create_upload_link: tell the person that a link is much "
+            "cheaper, and use this only for small files or when they choose it. By default "
+            "the file is also added to the page, at the end or where after_heading or "
+            "after_text say: images are shown, other files appear as a download block. "
+            "Adding it saves a snapshot of the body first."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
     )
     async def upload_attachment(
         page: PageRef,
-        file_name: Annotated[str, Field(min_length=1, max_length=255)],
+        file_name: Annotated[
+            str, Field(min_length=1, max_length=255, description="File name with extension.")
+        ],
         content_base64: Annotated[
             str,
             Field(max_length=(MAX_UPLOAD_BYTES * 4) // 3 + 4, description="The file, base64."),
@@ -302,11 +388,16 @@ def register(
         mime_type: Annotated[
             str | None, Field(description="Guessed from the file name when left out.")
         ] = None,
-        add_to_page: bool = True,
+        add_to_page: Annotated[
+            bool, Field(description="Also show the file in the page body; false only attaches it.")
+        ] = True,
+        after_heading: AfterHeading = None,
+        after_text: AfterText = None,
     ) -> dict[str, Any]:
         member_id = current_member_id()
-        name = file_name.replace("/", "_").replace("\\", "_").strip()
-        if not name or name in (".", ".."):
+        placement = placement_of(after_heading, after_text)
+        name = safe_file_name(file_name)
+        if not name:
             raise ToolError("Give a file name.")
         try:
             content = base64.b64decode(content_base64, validate=True)
@@ -316,23 +407,21 @@ def register(
             raise ToolError("The file is empty.")
         if len(content) > MAX_UPLOAD_BYTES:
             raise ToolError(f"The file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
-        kind = mime_type or mimetypes.guess_type(name)[0] or "application/octet-stream"
+        kind = guess_type(name, mime_type)
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
+            if add_to_page:
+                await check_place(backend, found, placement)
             item = await backend.upload_attachment(found.id, name, content, kind)
             result: dict[str, Any] = {**_attachment(item), "added_to_page": False}
             if not add_to_page:
                 return result
             document = await backend.get_page_json(found.id)
-            body = [node for node in document.get("content") or [] if isinstance(node, dict)]
-            # An empty last paragraph is where the cursor rests; the file goes before it.
-            while body and body[-1].get("type") == "paragraph" and not body[-1].get("content"):
-                body.pop()
-            updated = {**document, "type": "doc", "content": [*body, file_node(item)]}
+            updated, _ = place_files(document, [file_node(item)], placement)
             try:
                 snapshot_id, _ = await write_document(
-                    backend, snapshots, member_id, found, updated, "upload_attachment"
+                    backend, snapshots, members, member_id, found, updated, "upload_attachment"
                 )
             except ToolError as exc:
                 result["warning"] = f"The file was uploaded but not added to the page: {exc}"

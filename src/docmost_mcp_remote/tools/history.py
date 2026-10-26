@@ -221,7 +221,13 @@ def register(
             if version.document is None:
                 raise ToolError(f"Version {version_id} has no body to restore.")
             snapshot_id, changed = await write_document(
-                backend, snapshots, member_id, page, version.document, "restore_page_version"
+                backend,
+                snapshots,
+                members,
+                member_id,
+                page,
+                version.document,
+                "restore_page_version",
             )
             return {
                 "id": page.id,

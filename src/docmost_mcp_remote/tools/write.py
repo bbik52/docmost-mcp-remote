@@ -11,8 +11,10 @@ import asyncio
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
+import mcp_types as mt
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
@@ -23,9 +25,9 @@ from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
-from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary
+from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary, WorkspaceMember
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
-from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, mention_node
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import (
     apply_operation,
@@ -35,6 +37,7 @@ from docmost_mcp_remote.sections import (
     unified_diff,
 )
 from docmost_mcp_remote.tools.common import as_member, formatting_hint, page_link
+from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, wrap
@@ -48,6 +51,12 @@ MAX_CONTENT_CHARS = 500_000
 MAX_JSON_CHARS = 2_000_000
 MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
+#: Pages of workspace members read to find someone by id.
+_MEMBER_PAGES = 10
+MAX_MENTIONS = 10
+#: Seconds after someone else saved a page during which it counts as being edited.
+#: Docmost saves an open editor about every ten seconds while people type.
+BUSY_SECONDS = 60
 
 _WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
 _OVERWRITE = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False}
@@ -87,9 +96,36 @@ async def read_back(backend: DocmostBackend, page_id: str, before: str) -> Page 
     return None
 
 
+async def check_not_busy(members: MemberService, member_id: uuid.UUID, page: Page) -> None:
+    """Refuse to rewrite a page that someone else saved in the last minute.
+
+    A whole-body write replaces the document in the editor too, so what that
+    person types meanwhile would be lost. Appending and prepending merge.
+    """
+    if page.updated_at is None or page.last_updated_by is None:
+        return
+    saved = page.updated_at
+    if saved.tzinfo is None:
+        saved = saved.replace(tzinfo=UTC)
+    age = (datetime.now(UTC) - saved).total_seconds()
+    # Far in the future means the clocks disagree, and then the age says nothing.
+    if not -BUSY_SECONDS < age < BUSY_SECONDS:
+        return
+    if page.last_updated_by.id == await members.docmost_user_id(member_id):
+        return
+    who = page.last_updated_by.name or "Someone"
+    raise ToolError(
+        f"Nothing was written: {who} saved this page {max(int(age), 0)} seconds ago and may "
+        "be editing it right now, and rewriting the body would take away what they type. "
+        f"Try again in a minute, or add text with update_page operation 'append' or "
+        "'prepend', which keeps their changes."
+    )
+
+
 async def write_document(
     backend: DocmostBackend,
     snapshots: SnapshotStore,
+    members: MemberService,
     member_id: uuid.UUID,
     page: Page,
     document: dict[str, Any],
@@ -106,6 +142,7 @@ async def write_document(
         raise ToolError("The document was not written: " + " ".join(problems))
     if len(json.dumps(document)) > MAX_JSON_CHARS:
         raise ToolError(f"The document is larger than {MAX_JSON_CHARS} characters of JSON.")
+    await check_not_busy(members, member_id, page)
     current = await backend.get_page_json(page.id)
     snapshot_id = await snapshots.save(
         member_id=member_id,
@@ -169,6 +206,28 @@ async def _all_children(
     raise ToolError("Too many pages at this level to place a page; move it in Docmost.")
 
 
+async def find_person(backend: DocmostBackend, ref: str) -> WorkspaceMember:
+    """One workspace member by email, exact name or user id."""
+    wanted = ref.strip().lower()
+    found = await backend.workspace_members(query=ref.strip(), limit=100)
+    for key in ("email", "name"):
+        matches = [item for item in found.items if (getattr(item, key) or "").lower() == wanted]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ToolError(f"Several people are named {ref!r}; give their email.")
+    cursor: str | None = None
+    for _ in range(_MEMBER_PAGES):
+        page = await backend.workspace_members(cursor=cursor, limit=100)
+        match = next((item for item in page.items if item.id == ref.strip()), None)
+        if match is not None:
+            return match
+        if not page.has_next_page or not page.next_cursor:
+            break
+        cursor = page.next_cursor
+    raise ToolError(f"No workspace member matches {ref!r}; give their email.")
+
+
 def new_position(siblings: list[PageSummary], *, after_page_id: str | None, first: bool) -> str:
     """A position at the start, at the end, or right after one sibling."""
     keys = sorted(page.position for page in siblings if page.position)
@@ -216,6 +275,8 @@ def register(
         operation: BodyOperation,
         reason: str,
     ) -> dict[str, Any]:
+        if operation == "replace":
+            await check_not_busy(members, member_id, page)
         snapshot_id = await snapshots.save(
             member_id=member_id,
             page_id=page.id,
@@ -272,7 +333,8 @@ def register(
         name="create_page",
         description=(
             "Create a page in a space, optionally under a parent page and with a Markdown body. "
-            "Returns the new page's id and link."
+            "Returns the new page's id and link. Each call creates a new page, so do not repeat "
+            "it to retry; to change an existing page use update_page."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
@@ -312,7 +374,8 @@ def register(
             "keep the existing text, comments and formatting. 'replace' rewrites the whole "
             "body; read the page first and send the complete new body. It is refused on pages "
             "with formatting Markdown cannot hold (get_page lists it in markdown_loses); use "
-            "replace_page_json there. The previous body is saved as a snapshot that "
+            "replace_page_json there. 'replace' is also refused while someone else is editing "
+            "the page. The previous body is saved as a snapshot that "
             "restore_snapshot can bring back. With dry_run=true nothing is written and the "
             "result shows the change as a diff. To change one part of a long page, prefer "
             "replace_section."
@@ -354,9 +417,10 @@ def register(
             "format='json' returns it. Unlike Markdown this keeps everything Docmost can show: "
             "colors, merged table cells, columns, diagrams, mentions, comment highlights. "
             "Read the page as JSON first, change it and send the complete document. It is "
-            "checked against Docmost's editor schema before anything is written, and the "
-            "previous body is saved as a snapshot. With dry_run=true nothing is written; the "
-            "result lists any problems and shows the change as a Markdown diff."
+            "checked against Docmost's editor schema before anything is written, refused while "
+            "someone else is editing the page, and the previous body is saved as a snapshot. "
+            "With dry_run=true nothing is written; the result lists any problems and shows "
+            "the change as a Markdown diff."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("write"),
@@ -388,7 +452,7 @@ def register(
                     diff_truncated=truncated,
                 )
             snapshot_id, changed = await write_document(
-                backend, snapshots, member_id, found, document, "replace_page_json"
+                backend, snapshots, members, member_id, found, document, "replace_page_json"
             )
             return result(found, snapshot_id=str(snapshot_id), changed=changed)
 
@@ -456,7 +520,9 @@ def register(
 
     @mcp.tool(
         name="rename_page",
-        description="Change the title of a page.",
+        description=(
+            "Change the title of a page; its body and place in the tree stay as they are."
+        ),
         annotations=_WRITE,
         auth=require_scopes("write"),
     )
@@ -587,28 +653,50 @@ def register(
         name="add_comment",
         description=(
             "Add a comment to a page as plain text, or a reply to a comment with "
-            "reply_to_comment_id. Comments are visible to everyone who can see the page."
+            "reply_to_comment_id. Comments are visible to everyone who can see the page. "
+            "People in mention (emails, names or user ids) are @-mentioned at the start of "
+            "the comment, and Docmost notifies them; mention someone only when they need to "
+            "act on it."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
     )
     async def add_comment(
         page: PageRef,
-        text: Annotated[str, Field(min_length=1, max_length=10_000)],
+        text: Annotated[
+            str, Field(min_length=1, max_length=10_000, description="Comment text, plain text.")
+        ],
         reply_to_comment_id: Annotated[
             str | None, Field(description="Id of the comment to reply to.")
         ] = None,
+        mention: Annotated[
+            list[str] | None,
+            Field(max_length=MAX_MENTIONS, description="People to @-mention: email, name or id."),
+        ] = None,
     ) -> dict[str, Any]:
+        member_id = current_member_id()
+
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
+            people = [await find_person(backend, ref) for ref in dict.fromkeys(mention or [])]
+            me = await members.docmost_user_id(member_id) if people else None
             comment = await backend.create_comment(
-                found.id, text, parent_comment_id=reply_to_comment_id
+                found.id,
+                text,
+                parent_comment_id=reply_to_comment_id,
+                mentions=[
+                    mention_node(person.id, person.name or person.email or person.id, me)
+                    for person in people
+                ],
             )
-            return {
+            result: dict[str, Any] = {
                 "id": comment.id,
                 "page_id": found.id,
                 "parent_comment_id": comment.parent_comment_id,
             }
+            if people:
+                result["mentioned"] = [{"id": person.id, "name": person.name} for person in people]
+            return result
 
         return await as_member(members, action)
 
@@ -623,7 +711,9 @@ def register(
     )
     async def update_comment(
         comment_id: Annotated[str, Field(description="Comment id from list_comments.")],
-        text: Annotated[str, Field(min_length=1, max_length=10_000)],
+        text: Annotated[
+            str, Field(min_length=1, max_length=10_000, description="Comment text, plain text.")
+        ],
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             comment = await backend.get_comment(comment_id)
@@ -672,14 +762,20 @@ def register(
         name="trash_page",
         description=(
             "Move a page and its child pages to the Trash of its space. It can be restored with "
-            "restore_page. This server never deletes pages permanently."
+            "restore_page. This server never deletes pages permanently. Clients that can ask "
+            "the person first do so."
         ),
         annotations=_OVERWRITE,
         auth=require_scopes("delete"),
     )
-    async def trash_page(page: PageRef) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    async def trash_page(page: PageRef) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             found = await load_page(backend, page)
+            asked = await confirm(
+                f"Move the page {named(found.title)} and its child pages to the Trash?"
+            )
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.move_to_trash(found.id)
             logger.info("Moved page %s to Trash", found.id)
             return result(found, trashed=True)
@@ -716,7 +812,8 @@ def register(
         auth=require_scopes("read"),
     )
     async def list_snapshots(
-        page: PageRef, limit: Annotated[int, Field(ge=1, le=100)] = 20
+        page: PageRef,
+        limit: Annotated[int, Field(ge=1, le=100, description="Most snapshots to return.")] = 20,
     ) -> dict[str, Any]:
         member_id = current_member_id()
 
@@ -765,6 +862,7 @@ def register(
                 saved, changed = await write_document(
                     backend,
                     snapshots,
+                    members,
                     member_id,
                     found,
                     json.loads(snapshot.content),

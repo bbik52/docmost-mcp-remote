@@ -46,16 +46,16 @@ _HEADERS = {
 }
 
 Kind = Literal["page_export", "space_export", "attachment"]
-_LINK_IN_PATH = re.compile(r"/downloads/[^/?\s\"]+")
+_LINK_IN_PATH = re.compile(r"/(downloads|uploads)/[^/?\s\"]+")
 
 
 class RedactDownloadLinks(logging.Filter):
-    """Keeps download links out of the HTTP access log: a link is a credential."""
+    """Keeps download and upload links out of the HTTP access log: a link is a credential."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple):
             record.args = tuple(
-                _LINK_IN_PATH.sub("/downloads/[redacted]", arg) if isinstance(arg, str) else arg
+                _LINK_IN_PATH.sub(r"/\1/[redacted]", arg) if isinstance(arg, str) else arg
                 for arg in record.args
             )
         return True

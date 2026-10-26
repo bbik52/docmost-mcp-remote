@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Add files · Docmost MCP{% endblock %}
+{% block head %}<script src="/assets/upload.js" defer></script>{% endblock %}
+{% block body %}
+<h1>Add files to “{{ title }}”</h1>
+{% if link.state == "done" %}
+<p>These files are in the page now.</p>
+{% if page_url %}<p><a href="{{ page_url }}">Open the page</a></p>{% endif %}
+{% else %}
+<p class="muted">They go {{ placement }}, in the order shown below, when you press Done.
+{% if page_url %}<a href="{{ page_url }}">Open the page</a>{% endif %}</p>
+
+<label class="drop" id="drop">
+  <input type="file" id="picker" multiple>
+  <strong>Drop files here</strong> or click to choose them.
+  <span class="muted">Up to {{ max_files }} files, {{ max_mb }} MB in total.</span>
+</label>
+
+<p class="muted hint" id="hint" hidden>Drag files in the list to change their order.</p>
+<ol class="uploads" id="list" data-files="{{ files_json }}" data-max-bytes="{{ max_mb * 1024 * 1024 }}"></ol>
+
+<div class="row">
+  <p class="muted" id="expiry" data-expires="{{ expires_at }}">This link works for {{ minutes }} more minutes, until {{ expires_time }}. Files not added to the page by then are deleted from this server.</p>
+  <button type="button" id="done" disabled>Done</button>
+</div>
+<p id="status" role="status"></p>
+<noscript><p class="error">This page needs JavaScript to send files.</p></noscript>
+{% endif %}
+{% endblock %}

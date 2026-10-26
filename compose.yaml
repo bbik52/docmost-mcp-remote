@@ -4,7 +4,7 @@
 
 services:
   server:
-    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.0.0 to pin one.
+    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.1.0 to pin one.
     image: ghcr.io/bbik52/docmost-mcp-remote:${IMAGE_TAG:-1}
     restart: unless-stopped
     environment:
@@ -19,6 +19,8 @@ services:
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
+      UPLOAD_RETENTION_MINUTES: ${UPLOAD_RETENTION_MINUTES:-60}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
       # The port is published on 127.0.0.1 only, so every client is a local proxy.

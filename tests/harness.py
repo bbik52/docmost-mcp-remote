@@ -13,6 +13,7 @@ import httpx
 import uvicorn
 from fastmcp import Client
 from fastmcp.client.auth import BearerAuth
+from fastmcp.client.elicitation import ElicitResult
 
 from docmost_mcp_remote.docmost import DocmostClient
 from docmost_mcp_remote.server import create_app
@@ -20,6 +21,7 @@ from tests.conftest import make_settings
 
 _CSRF = re.compile(r'name="csrf" value="([^"]+)"')
 _TOKEN = re.compile(r"dmr_[A-Za-z0-9_-]+")
+SIGN_IN_TIMEOUT = 60.0
 
 
 def _free_port() -> int:
@@ -59,7 +61,9 @@ class RunningServer:
         password: str = "pw",
     ) -> str:
         """Sign in through the web form and create a personal token."""
-        with httpx.Client(base_url=self.url) as web:
+        # Sign-in asks Docmost for its version, which Docmost checks against
+        # GitHub; that can take longer than httpx's default five seconds.
+        with httpx.Client(base_url=self.url, timeout=SIGN_IN_TIMEOUT) as web:
             csrf = _CSRF.search(web.get("/login").text)
             assert csrf
             web.post("/login", data={"csrf": csrf.group(1), "email": email, "password": password})
@@ -83,9 +87,82 @@ class RunningServer:
 
         return asyncio.run(run())
 
+    def call_asked(
+        self,
+        token: str,
+        tool: str,
+        arguments: dict[str, Any],
+        *,
+        answer: bool,
+        asked: list[str],
+        mode: Any = "auto",
+    ) -> Any:
+        """Call a tool from a client that can ask its person; ``answer`` is their reply.
+
+        Each question shown is appended to ``asked``. ``mode`` "legacy" connects
+        with a handshake-era protocol version, where the server asks while the
+        call waits; "auto" uses the newest, where the client asks and retries.
+        """
+
+        async def reply(message: str, *_: Any) -> Any:
+            asked.append(message)
+            return {"confirm": True} if answer else ElicitResult(action="decline")
+
+        async def run() -> Any:
+            async with Client(
+                f"{self.url}/mcp", auth=BearerAuth(token), elicitation_handler=reply, mode=mode
+            ) as client:
+                result = await client.call_tool(tool, arguments)
+                return result.structured_content
+
+        return asyncio.run(run())
+
     def tools(self, token: str) -> list[str]:
         async def run() -> list[str]:
             async with Client(f"{self.url}/mcp", auth=BearerAuth(token)) as client:
                 return sorted(tool.name for tool in await client.list_tools())
 
         return asyncio.run(run())
+
+    def _session(self, token: str, use: Any) -> Any:
+        async def run() -> Any:
+            async with Client(f"{self.url}/mcp", auth=BearerAuth(token)) as client:
+                return await use(client)
+
+        return asyncio.run(run())
+
+    def resources(self, token: str) -> list[str]:
+        """URIs of the resources and resource templates the token sees."""
+
+        async def use(client: Client[Any]) -> list[str]:
+            fixed = [str(item.uri) for item in await client.list_resources()]
+            templates = [item.uri_template for item in await client.list_resource_templates()]
+            return sorted(fixed + templates)
+
+        return list(self._session(token, use))
+
+    def read(self, token: str, uri: str) -> str:
+        async def use(client: Client[Any]) -> str:
+            contents = await client.read_resource(uri)
+            return "".join(getattr(item, "text", "") for item in contents)
+
+        return str(self._session(token, use))
+
+    def prompts(self, token: str) -> list[str]:
+        async def use(client: Client[Any]) -> list[str]:
+            return sorted(prompt.name for prompt in await client.list_prompts())
+
+        return list(self._session(token, use))
+
+    def prompt(self, token: str, name: str, arguments: dict[str, Any] | None = None) -> str:
+        async def use(client: Client[Any]) -> str:
+            result = await client.get_prompt(name, arguments or {})
+            return "".join(getattr(message.content, "text", "") for message in result.messages)
+
+        return str(self._session(token, use))
+
+    def complete(self, token: str, ref: Any, argument: str, value: str) -> list[str]:
+        async def use(client: Client[Any]) -> list[str]:
+            return list((await client.complete(ref, {"name": argument, "value": value})).values)
+
+        return list(self._session(token, use))

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -427,6 +427,41 @@ def test_replace_with_same_body_does_not_write(
     assert docmost.requests("pages/update") == []
 
 
+def _saved(seconds_ago: float, user_id: str, name: str = "Anna") -> dict[str, Any]:
+    at = datetime.now(UTC) - timedelta(seconds=seconds_ago)
+    return {"updatedAt": at.isoformat(), "lastUpdatedBy": {"id": user_id, "name": name}}
+
+
+def test_rewrite_refused_while_someone_else_edits(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    docmost.pages["p1"].update(_saved(5, "u1"))
+    replace = {"page": "p1", "content": "Rewritten", "operation": "replace"}
+    with pytest.raises(ToolError, match="Anna saved this page 5 seconds ago"):
+        server.call(token, "update_page", replace)
+    document = text_to_doc("Rewritten")
+    with pytest.raises(ToolError, match="may be editing it right now"):
+        server.call(token, "replace_page_json", {"page": "p1", "document": document})
+    assert docmost.requests("pages/update") == []
+    assert server.call(token, "list_snapshots", {"page": "p1"})["snapshots"] == []
+    # Adding text merges with what they type, and a dry run writes nothing.
+    assert server.call(token, "update_page", {"page": "p1", "content": "More"})["changed"]
+    assert server.call(token, "update_page", {**replace, "dry_run": True})["dry_run"]
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [_saved(5, "docmost-user-1"), _saved(120, "u1"), _saved(-600, "u1")],
+    ids=["own-edit", "a-while-ago", "clock-skew"],
+)
+def test_rewrite_allowed_when_page_is_not_busy(
+    server: RunningServer, token: str, docmost: FakeDocmost, saved: dict[str, Any]
+) -> None:
+    docmost.pages["p1"].update(saved)
+    replace = {"page": "p1", "content": "Rewritten", "operation": "replace"}
+    assert server.call(token, "update_page", replace)["changed"] is True
+
+
 def test_snapshot_failure_blocks_the_write(
     server: RunningServer, token: str, docmost: FakeDocmost, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -663,6 +698,57 @@ def test_add_comment(server: RunningServer, token: str, docmost: FakeDocmost) ->
     sent = docmost.requests("comments/create")[-1]
     assert sent["parentCommentId"] == "c1"
     assert "Looks good" in sent["content"]
+
+
+def test_trash_asks_the_person(server: RunningServer, docmost: FakeDocmost) -> None:
+    token = server.token(scopes=("write", "delete"))
+    asked: list[str] = []
+    with pytest.raises(ToolError, match="the person declined"):
+        server.call_asked(token, "trash_page", {"page": "p1"}, answer=False, asked=asked)
+    assert asked == ['Move the page "Guide" and its child pages to the Trash?']
+    assert docmost.requests("pages/delete") == []
+    server.call_asked(token, "trash_page", {"page": "p1"}, answer=True, asked=asked)
+    assert docmost.requests("pages/delete") == [{"pageId": "p1"}]
+
+
+def test_add_comment_with_mentions(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    people = [
+        {"id": "u2", "name": "Boris", "email": "boris@example.com"},
+        {"id": "u3", "name": "Vera", "email": "vera@example.com"},
+        {"id": "u4", "name": "Vera", "email": "vera.k@example.com"},
+    ]
+
+    def members(request: httpx.Request) -> httpx.Response:
+        query = str(json.loads(request.content).get("query") or "").lower()
+        found = [p for p in people if query in p["email"] or query in p["name"].lower()]
+        return ok({"items": found, "meta": {"hasNextPage": False}})
+
+    docmost.recorder.routes["/api/workspace/members"] = members
+    data = server.call(
+        token,
+        "add_comment",
+        {"page": "p1", "text": "Please check", "mention": ["Boris", "vera@example.com", "u4"]},
+    )
+    assert data["mentioned"] == [
+        {"id": "u2", "name": "Boris"},
+        {"id": "u3", "name": "Vera"},
+        {"id": "u4", "name": "Vera"},
+    ]
+    sent = json.loads(docmost.requests("comments/create")[-1]["content"])
+    first = sent["content"][0]["content"]
+    assert [node["attrs"]["entityId"] for node in first if node["type"] == "mention"] == [
+        "u2",
+        "u3",
+        "u4",
+    ]
+    assert first[0]["attrs"]["creatorId"] == "docmost-user-1"
+    assert first[0]["attrs"]["label"] == "Boris"
+    assert first[-1] == {"type": "text", "text": "Please check"}
+
+    with pytest.raises(ToolError, match="Several people are named 'Vera'"):
+        server.call(token, "add_comment", {"page": "p1", "text": "x", "mention": ["Vera"]})
+    with pytest.raises(ToolError, match="No workspace member matches 'nobody'"):
+        server.call(token, "add_comment", {"page": "p1", "text": "x", "mention": ["nobody"]})
 
 
 def test_trash_and_restore(server: RunningServer, token: str, docmost: FakeDocmost) -> None:

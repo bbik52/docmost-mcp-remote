@@ -25,27 +25,35 @@ from docmost_mcp_remote.db.engine import create_engine, migrate
 from docmost_mcp_remote.db.oauth_store import OAuthStore
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store
+from docmost_mcp_remote.db.upload_store import UploadStore
 from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostError
-from docmost_mcp_remote.guard import ToolGuard
+from docmost_mcp_remote.guard import CatalogOnly, ToolGuard
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.oauth import DocmostOAuthProvider
 from docmost_mcp_remote.tools import (
     account,
     files,
+    health,
     history,
     labels,
     manage,
     navigate,
+    people,
+    prompts,
     read,
+    resources,
     write,
 )
 from docmost_mcp_remote.web.downloads import DownloadLinks
 from docmost_mcp_remote.web.routes import WebPages
+from docmost_mcp_remote.web.uploads import UploadLinks
 
 logger = logging.getLogger(__name__)
 
 MCP_PATH = "/mcp"
 CLEANUP_INTERVAL_SECONDS = 60 * 60
+#: Expired upload links go quickly: their files must not outlive them by much.
+UPLOAD_CLEANUP_SECONDS = 60
 
 INSTRUCTIONS = (
     "Tools for one Docmost wiki, acting as the signed-in member with their Docmost rights. "
@@ -74,6 +82,17 @@ async def _cleanup_periodically(
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
 
 
+async def _cleanup_uploads_periodically(uploads: UploadLinks) -> None:
+    while True:
+        try:
+            deleted = await uploads.cleanup()
+            if deleted:
+                logger.info("Deleted %d expired upload links and their files", deleted)
+        except Exception:
+            logger.exception("Cleanup of expired upload links failed")
+        await asyncio.sleep(UPLOAD_CLEANUP_SECONDS)
+
+
 def create_docmost_client(settings: Settings) -> CeDocmostClient:
     timeout = settings.docmost_timeout_seconds
     return CeDocmostClient(
@@ -83,12 +102,33 @@ def create_docmost_client(settings: Settings) -> CeDocmostClient:
     )
 
 
+def create_catalog_server() -> FastMCP:
+    """The server's tools, resources and prompts without Docmost, a database or sign-in.
+
+    For MCP directories that start a server to list what it offers: it needs no
+    configuration, runs over stdio and refuses every call.
+    """
+    settings = Settings(
+        public_url="http://localhost:8000",
+        docmost_url="https://docmost.example.com",
+        database_url="postgresql://catalog@localhost/catalog",
+        secret_key="catalog-only-" + "x" * 32,
+        _env_file=None,
+    )
+    return create_server(settings, catalog=True)
+
+
 def create_server(
     settings: Settings,
     docmost: DocmostClient | None = None,
     engine: AsyncEngine | None = None,
+    *,
+    catalog: bool = False,
 ) -> FastMCP:
-    """Build the MCP server with its web pages and tools."""
+    """Build the MCP server with its web pages and tools.
+
+    With ``catalog`` it only describes itself; see ``create_catalog_server``.
+    """
     client = docmost or create_docmost_client(settings)
     database_url = settings.database_url.get_secret_value()
     db = engine or create_engine(database_url)
@@ -101,6 +141,7 @@ def create_server(
     members = MemberService(settings, store, client, cipher)
     snapshots = SnapshotStore(db, cipher)
     audit = AuditStore(db)
+    uploads = UploadLinks(settings, members, UploadStore(db, cipher), snapshots)
 
     @asynccontextmanager
     async def lifespan(_: FastMCP[Any]) -> AsyncIterator[dict[str, Any]]:
@@ -112,13 +153,17 @@ def create_server(
             logger.warning("Docmost is not reachable at startup: %s", exc)
         else:
             logger.info("Docmost is reachable")
-        cleanup = asyncio.create_task(_cleanup_periodically(settings, oauth, snapshots, audit))
+        cleanups = [
+            asyncio.create_task(_cleanup_periodically(settings, oauth, snapshots, audit)),
+            asyncio.create_task(_cleanup_uploads_periodically(uploads)),
+        ]
         try:
             yield {}
         finally:
-            cleanup.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await cleanup
+            for cleanup in cleanups:
+                cleanup.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await cleanup
             await client.aclose()
             if engine is None:
                 await db.dispose()
@@ -128,11 +173,14 @@ def create_server(
         instructions=INSTRUCTIONS,
         version=__version__,
         website_url="https://github.com/bbik52/docmost-mcp-remote",
-        auth=DocmostOAuthProvider(settings, store, oauth),
+        auth=None if catalog else DocmostOAuthProvider(settings, store, oauth),
         mask_error_details=True,
-        lifespan=lifespan,
+        lifespan=None if catalog else lifespan,
     )
-    mcp.add_middleware(ToolGuard(audit, settings.tool_calls_per_minute))
+    if catalog:
+        mcp.add_middleware(CatalogOnly())
+    else:
+        mcp.add_middleware(ToolGuard(audit, settings.tool_calls_per_minute))
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(_: Request) -> Response:
@@ -140,7 +188,7 @@ def create_server(
 
     pages = WebPages(settings, store, oauth, members)
     links = DownloadLinks(settings, members, cipher)
-    for route in [*pages.routes(), *links.routes()]:
+    for route in [*pages.routes(), *links.routes(), *uploads.routes()]:
         mcp.custom_route(route.path, methods=sorted(route.methods or []), include_in_schema=False)(
             route.endpoint
         )
@@ -152,7 +200,11 @@ def create_server(
     labels.register(mcp, settings, members)
     manage.register(mcp, settings, members)
     navigate.register(mcp, settings, members)
-    files.register(mcp, settings, members, snapshots, links)
+    health.register(mcp, settings, members)
+    people.register(mcp, settings, members)
+    files.register(mcp, settings, members, snapshots, links, uploads)
+    resources.register(mcp, settings, members)
+    prompts.register(mcp)
     return mcp
 
 

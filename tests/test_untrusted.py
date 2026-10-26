@@ -46,6 +46,7 @@ def test_truncate_without_line_breaks() -> None:
     [
         ("01a17252-1372-798d-bdb8-45edcaef9ca3", "01a17252-1372-798d-bdb8-45edcaef9ca3"),
         ("ufEAIEMwQT", "ufEAIEMwQT"),
+        ("hello-world-ufEAIEMwQT", "ufEAIEMwQT"),
         ("https://docs.example.com/s/general/p/hello-world-ufEAIEMwQT", "ufEAIEMwQT"),
         ("https://docs.example.com/s/general/p/ufEAIEMwQT?x=1#h", "ufEAIEMwQT"),
         ("https://docs.example.com/s/general/p/", "https://docs.example.com/s/general/p/"),

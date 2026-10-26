@@ -12,6 +12,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Docmost passwords (only with `RELOGIN_MODE=stored_password`) | `docmost_sessions` | Same as session tokens; not stored at all by default |
 | Personal tokens, OAuth access and refresh tokens, authorization codes | `tokens`, `oauth_codes` | Only SHA-256 hashes are stored; tokens are shown once |
 | Page content | Docmost; copies in `snapshots` | Snapshots are encrypted like sessions, private to the member, deleted after `SNAPSHOT_RETENTION_DAYS` |
+| Files sent to an upload link | `upload_files` | Encrypted like snapshots, bound to the link; the content is dropped once the file is in Docmost, and everything is deleted when the link expires (`UPLOAD_RETENTION_MINUTES`) |
 | Who did what | `audit_log` | Tool, page or space id, outcome, duration; never content or arguments; deleted after `AUDIT_RETENTION_DAYS` |
 | Web sessions of the account and consent pages | Browser cookie | Signed (itsdangerous), `HttpOnly`, `SameSite=Lax`, `__Host-` prefix and `Secure` over https |
 
@@ -59,6 +60,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Docmost accepting a write and dropping it | Read-back after every write; the call fails and names the snapshot | `tools/write.py` |
 | A runaway agent hammering Docmost | `TOOL_CALLS_PER_MINUTE` per member over all clients; page and list size limits | `guard.py`, `tests/test_guard.py` |
 | A download link reaching someone else | Links are encrypted and authenticated with the server key, name one member and one file, expire after ten minutes, and are served with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `no-store`; files are streamed, not stored | `web/downloads.py`, `tests/test_file_tools.py` |
+| An upload link reaching someone else | A link is 256 random bits, stored only as a hash, names one member and one page, expires after `UPLOAD_RETENTION_MINUTES` and takes at most `UPLOAD_MAX_MB` and 50 files; files reach Docmost only when Done is pressed, after a snapshot, and the page keeps the busy-page guard; the page's script is same-origin only under a strict CSP | `web/uploads.py`, `tests/test_upload_links.py` |
 | Large Docmost responses exhausting memory | Responses are read with a size limit (`DOCMOST_MAX_RESPONSE_BYTES`) and a timeout | `docmost/ce.py` |
 | Secrets or content in logs | Logs carry ids only; a test checks that passwords, tokens, emails and page content do not appear | `tests/test_guard.py` |
 | Admin space restriction bypassed | `ALLOWED_SPACES` is checked in every tool, including writes; outside spaces answer like missing ones | `tools/spaces.py`, `tests/test_write_tools.py` |
@@ -80,6 +82,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
   file as the member until it expires, ten minutes after it was made. The
   server keeps links out of its access log; a reverse proxy in front of it may
   still log them.
+- **Upload links are bearer links too.** Whoever has one can add files to
+  that one page, as the member, until the link expires or Done is pressed.
 - **Rate limits are kept in memory** and reset on restart; run one server
   instance per Docmost.
 - **The reverse proxy is outside this project.** A proxy that forwards plain

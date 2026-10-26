@@ -50,10 +50,15 @@ def _formatting(losses: list[str] | None) -> dict[str, Any]:
 
 
 def page_ref(value: str) -> str:
-    """Accept a page id, its short slug id, or a Docmost page URL."""
+    """Accept a page id, its short slug id, a Docmost page URL or its last part.
+
+    The last part of a page URL is the title as a slug followed by the slug id
+    (``getting-started-a1B2c3D4e5``); a page id is a UUID, whose last group has
+    twelve characters, so it is never taken for one.
+    """
     value = value.strip()
-    if "/" in value:
-        last = value.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    last = value.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    if "/" in value or "-" in last:
         candidate = last.rsplit("-", 1)[-1]
         if _SLUG_ID.match(candidate):
             return candidate
@@ -78,7 +83,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
 
     @mcp.tool(
         name="list_spaces",
-        description="List the Docmost spaces you can access, with your role in each.",
+        description=(
+            "List the Docmost spaces you can access, with your role in each. Start here to "
+            "get the space ids other tools need."
+        ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
     )
@@ -136,7 +144,8 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         description=(
             "List pages of a space as a tree, one level at a time: without parent_page_id the "
             "top-level pages, with it the children of that page. has_children tells whether a "
-            "page has children to list next."
+            "page has children to list next. To see several levels in one call, use "
+            "get_page_tree; to find a page by name, use suggest or search."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
@@ -163,7 +172,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
 
     @mcp.tool(
         name="recent_pages",
-        description="List recently updated pages, newest first, in one space or in all spaces.",
+        description=(
+            "List recently updated pages, newest first, in one space or in all spaces, to see "
+            "what changed lately. For the changes of one page, use list_page_history."
+        ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
     )
@@ -325,7 +337,8 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         description=(
             "Full-text search over page titles and bodies you can access. Returns matching "
             "pages with a short snippet; use get_page to read one. Can be narrowed to titles, "
-            "labels or pages you created."
+            "labels or pages you created. To find a page or person by a part of its name, "
+            "suggest is faster."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
@@ -333,7 +346,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     async def search(
         query: Annotated[str, Field(min_length=1, max_length=500, description="Search words.")],
         space_id: Annotated[str | None, Field(description="Only search this space.")] = None,
-        limit: Annotated[int, Field(ge=1, le=50)] = 20,
+        limit: Annotated[int, Field(ge=1, le=50, description="Most results to return.")] = 20,
         title_only: Annotated[
             bool, Field(description="Match page titles only. Needs Docmost 0.96 or newer.")
         ] = False,

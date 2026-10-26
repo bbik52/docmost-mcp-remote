@@ -20,7 +20,8 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         description=(
             "Show which Docmost account this connection acts as, the scopes the member "
             "granted to this client, the Docmost version, and the account page where the "
-            "member sees and revokes connected apps and tokens."
+            "member sees and revokes connected apps and tokens. Use it when unsure whose "
+            "rights you act with or why a tool is missing."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False},
         auth=require_scopes("read"),

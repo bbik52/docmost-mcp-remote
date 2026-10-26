@@ -95,6 +95,11 @@ class MemberService:
         logger.info("Member %s signed in", member.id)
         return member
 
+    async def docmost_user_id(self, member_id: uuid.UUID) -> str | None:
+        """The member's own Docmost user id."""
+        member = await self._store.get_member(member_id)
+        return member.docmost_user_id if member is not None else None
+
     async def _token(self, member_id: uuid.UUID) -> str:
         stored = await self._store.load_session(member_id)
         if stored is None or stored.expired:

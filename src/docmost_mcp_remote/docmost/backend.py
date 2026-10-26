@@ -22,6 +22,8 @@ from docmost_mcp_remote.docmost.models import (
     Group,
     HistoryEntry,
     HistoryVersion,
+    Invitation,
+    InviteRole,
     Label,
     LinkedPage,
     Page,
@@ -33,6 +35,7 @@ from docmost_mcp_remote.docmost.models import (
     SpaceRole,
     Suggestions,
     WorkspaceMember,
+    WorkspaceRole,
 )
 from docmost_mcp_remote.docmost.version import VersionCheck
 
@@ -137,6 +140,34 @@ class DocmostBackend(Protocol):
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Group]: ...
 
+    async def group_members(
+        self, group_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]: ...
+
+    async def create_group(
+        self, name: str, *, description: str | None = None, user_ids: list[str] | None = None
+    ) -> Group: ...
+
+    async def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> Group: ...
+
+    async def add_group_members(self, group_id: str, user_ids: list[str]) -> None: ...
+
+    async def invitations(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Invitation]: ...
+
+    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None: ...
+
+    async def resend_invitation(self, invitation_id: str) -> None: ...
+
+    async def revoke_invitation(self, invitation_id: str) -> None: ...
+
+    async def change_workspace_role(self, user_id: str, role: WorkspaceRole) -> None: ...
+
+    async def set_member_active(self, user_id: str, active: bool) -> None: ...
+
     async def suggest(
         self,
         query: str,
@@ -192,7 +223,12 @@ class DocmostBackend(Protocol):
     async def get_comment(self, comment_id: str) -> Comment: ...
 
     async def create_comment(
-        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+        self,
+        page_id: str,
+        text: str,
+        *,
+        parent_comment_id: str | None = None,
+        mentions: list[dict[str, Any]] | None = None,
     ) -> Comment: ...
 
     async def update_comment(self, comment_id: str, text: str) -> Comment: ...
