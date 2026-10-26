@@ -23,13 +23,17 @@ from docmost_mcp_remote.docmost.errors import (
     DocmostResponseTooLargeError,
     DocmostUnavailableError,
 )
+from docmost_mcp_remote.docmost.links import mark_internal_links
 from docmost_mcp_remote.docmost.models import (
+    BacklinkDirection,
     BodyOperation,
     Comment,
     CopiedPage,
     CurrentUser,
     HistoryEntry,
     HistoryVersion,
+    Label,
+    LinkedPage,
     Page,
     PageSummary,
     Paginated,
@@ -74,6 +78,7 @@ class CeDocmostClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._max_response_bytes = max_response_bytes
+        self.web_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api",
             timeout=timeout,
@@ -287,13 +292,70 @@ class CeDocmostSession:
         return HistoryVersion.from_api(data)
 
     async def search(
-        self, query: str, *, space_id: str | None = None, limit: int = 20
+        self,
+        query: str,
+        *,
+        space_id: str | None = None,
+        limit: int = 20,
+        title_only: bool = False,
+        label_ids: list[str] | None = None,
+        creator_id: str | None = None,
     ) -> list[SearchHit]:
         body: dict[str, Any] = {"query": query, "limit": _limit(limit)}
         if space_id:
             body["spaceId"] = space_id
+        if title_only:
+            body["titleOnly"] = True
+        if label_ids:
+            body["labelIds"] = label_ids
+        if creator_id:
+            body["creatorId"] = creator_id
         data = await self._call("search", body)
         return [SearchHit.from_api(item) for item in _items(data)][: _limit(limit)]
+
+    async def backlinks(
+        self,
+        page_id: str,
+        direction: BacklinkDirection,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Paginated[LinkedPage]:
+        data = await self._call(
+            "pages/backlinks",
+            {"pageId": page_id, "direction": direction, "limit": _limit(limit), "cursor": cursor},
+        )
+        return _paginated(data, [LinkedPage.model_validate(item) for item in _items(data)])
+
+    async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]:
+        data = await self._call(
+            "labels", {"type": "page", "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Label.model_validate(item) for item in _items(data)])
+
+    async def page_labels(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 100
+    ) -> Paginated[Label]:
+        data = await self._call(
+            "pages/labels", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [Label.model_validate(item) for item in _items(data)])
+
+    async def pages_by_label(
+        self, name: str, *, space_id: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[LinkedPage]:
+        body: dict[str, Any] = {"name": name, "limit": _limit(limit), "cursor": cursor}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("labels/pages", body)
+        return _paginated(data, [LinkedPage.model_validate(item) for item in _items(data)])
+
+    async def add_labels(self, page_id: str, names: list[str]) -> list[Label]:
+        data = await self._call("pages/labels/add", {"pageId": page_id, "names": names})
+        return [Label.model_validate(item) for item in _items(data)]
+
+    async def remove_label(self, page_id: str, label_id: str) -> None:
+        await self._call("pages/labels/remove", {"pageId": page_id, "labelId": label_id})
 
     async def list_comments(
         self, page_id: str, *, cursor: str | None = None, limit: int = 50
@@ -313,7 +375,7 @@ class CeDocmostSession:
     ) -> Page:
         body: dict[str, Any] = {"spaceId": space_id, "title": title}
         if markdown:
-            body["content"] = markdown
+            body["content"] = mark_internal_links(markdown, self._client.web_url)
             body["format"] = "markdown"
         if parent_page_id:
             body["parentPageId"] = parent_page_id
@@ -323,7 +385,12 @@ class CeDocmostSession:
     async def update_page_body(self, page_id: str, markdown: str, operation: BodyOperation) -> None:
         await self._call(
             "pages/update",
-            {"pageId": page_id, "content": markdown, "operation": operation, "format": "markdown"},
+            {
+                "pageId": page_id,
+                "content": mark_internal_links(markdown, self._client.web_url),
+                "operation": operation,
+                "format": "markdown",
+            },
         )
 
     async def rename_page(self, page_id: str, title: str) -> None:

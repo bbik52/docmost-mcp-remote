@@ -78,13 +78,16 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `get_page` | read | Одна страница в Markdown по id, slug id или URL в Docmost |
 | `get_page_outline` | read | Заголовки страницы, чтобы найти раздел, не читая всё тело |
 | `get_section` | read | Один раздел страницы с хешем для `replace_section` |
-| `search` | read | Полнотекстовый поиск с фрагментами |
+| `search` | read | Полнотекстовый поиск с фрагментами; фильтры по заголовку, меткам и своим страницам |
 | `list_comments` | read | Комментарии и ответы на странице |
 | `list_trash` | read | Страницы в корзине пространства |
 | `list_snapshots` | read | Снимки, которые сервер сохранил перед вашими изменениями страницы |
 | `list_page_history` | read | Версии страницы, сохранённые Docmost, и кто их менял |
 | `get_page_version` | read | Одна сохранённая версия страницы в Markdown |
 | `diff_page` | read | Unified diff между текущим телом, сохранённой версией или снимком |
+| `list_backlinks` | read | Страницы, которые ссылаются на страницу, или на которые ссылается она (Docmost 0.90+) |
+| `list_labels` | read | Метки рабочего пространства или одной страницы (Docmost 0.90+) |
+| `find_pages_by_label` | read | Страницы с меткой в пространстве (Docmost 0.90+) |
 | `create_page` | write | Новая страница с телом в Markdown, при необходимости внутри родительской |
 | `update_page` | write | Добавить в конец, в начало или заменить тело страницы на Markdown; `dry_run` показывает diff |
 | `replace_section` | write | Заменить один раздел страницы; отказ, если раздел изменился после чтения |
@@ -94,6 +97,8 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `duplicate_page` | write | Скопировать страницу с дочерними в то же или в другое пространство |
 | `add_comment` | write | Прокомментировать страницу или ответить на комментарий |
 | `update_comment` | write | Изменить текст своего комментария |
+| `add_labels` | write | Добавить метки странице (Docmost 0.90+) |
+| `remove_label` | write | Убрать метку со страницы (Docmost 0.90+) |
 | `restore_snapshot` | write | Вернуть тело страницы к снимку |
 | `trash_page` | delete | Переместить страницу в корзину |
 | `restore_page` | delete | Восстановить страницу из корзины |

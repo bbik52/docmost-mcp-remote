@@ -66,7 +66,9 @@ sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
 0.97.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
-password.
+password. Labels and backlinks need Docmost 0.90 or newer, and the
+`title_only` and `labels` search filters need 0.96 or newer; on older
+versions these tools answer that Docmost needs an upgrade.
 
 ## Tools
 
@@ -80,13 +82,16 @@ password.
 | `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
 | `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
 | `get_section` | read | One section of a page, with a hash for `replace_section` |
-| `search` | read | Full-text search with snippets |
+| `search` | read | Full-text search with snippets; filters by title only, labels or your own pages |
 | `list_comments` | read | Comments and replies on a page |
 | `list_trash` | read | Pages in the Trash of a space |
 | `list_snapshots` | read | Snapshots this server saved before your changes to a page |
 | `list_page_history` | read | Versions of a page saved by Docmost, with who changed it |
 | `get_page_version` | read | One saved version of a page as Markdown |
 | `diff_page` | read | Unified diff between the current body, a saved version or a snapshot |
+| `list_backlinks` | read | Pages that link to a page, or that a page links to (Docmost 0.90+) |
+| `list_labels` | read | Labels of the workspace or of one page (Docmost 0.90+) |
+| `find_pages_by_label` | read | Pages with a label in a space (Docmost 0.90+) |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
 | `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
 | `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
@@ -96,6 +101,8 @@ password.
 | `duplicate_page` | write | Copy a page with its children, in the same space or into another one |
 | `add_comment` | write | Comment on a page or reply to a comment |
 | `update_comment` | write | Change the text of one of your own comments |
+| `add_labels` | write | Add labels to a page (Docmost 0.90+) |
+| `remove_label` | write | Remove a label from a page (Docmost 0.90+) |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
 | `trash_page` | delete | Move a page to the Trash |
 | `restore_page` | delete | Restore a page from the Trash |

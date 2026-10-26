@@ -90,3 +90,11 @@ async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
         yield engine
     finally:
         await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def forget_docmost_version() -> None:
+    """Each test may fake another Docmost version."""
+    from docmost_mcp_remote.tools import common
+
+    common._version_cache.clear()

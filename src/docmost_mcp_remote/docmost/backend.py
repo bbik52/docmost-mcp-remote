@@ -11,12 +11,15 @@ from __future__ import annotations
 from typing import Protocol
 
 from docmost_mcp_remote.docmost.models import (
+    BacklinkDirection,
     BodyOperation,
     Comment,
     CopiedPage,
     CurrentUser,
     HistoryEntry,
     HistoryVersion,
+    Label,
+    LinkedPage,
     Page,
     PageSummary,
     Paginated,
@@ -65,8 +68,38 @@ class DocmostBackend(Protocol):
     async def history_version(self, history_id: str) -> HistoryVersion: ...
 
     async def search(
-        self, query: str, *, space_id: str | None = None, limit: int = 20
+        self,
+        query: str,
+        *,
+        space_id: str | None = None,
+        limit: int = 20,
+        title_only: bool = False,
+        label_ids: list[str] | None = None,
+        creator_id: str | None = None,
     ) -> list[SearchHit]: ...
+
+    async def backlinks(
+        self,
+        page_id: str,
+        direction: BacklinkDirection,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Paginated[LinkedPage]: ...
+
+    async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]: ...
+
+    async def page_labels(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 100
+    ) -> Paginated[Label]: ...
+
+    async def pages_by_label(
+        self, name: str, *, space_id: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[LinkedPage]: ...
+
+    async def add_labels(self, page_id: str, names: list[str]) -> list[Label]: ...
+
+    async def remove_label(self, page_id: str, label_id: str) -> None: ...
 
     async def list_comments(
         self, page_id: str, *, cursor: str | None = None, limit: int = 50
