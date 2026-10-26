@@ -133,6 +133,30 @@ and reports an error if Docmost did not apply it (this happens when Docmost
 runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
 were later deleted in Docmost until they expire.
 
+## Resources and prompts
+
+Besides tools, which the model picks itself, the server offers resources and
+prompts that you pick in your client, where the client supports them (Claude
+Desktop and Claude Code do; many clients only support tools).
+
+| Resource | What it holds |
+|---|---|
+| `docmost://spaces` | The spaces you can access, with your role |
+| `docmost://pages/{page}` | One page as Markdown, with its place and link. While you type a title, the client is offered matching pages |
+
+| Prompt | Scope | What it asks for |
+|---|---|---|
+| `summarize_page` | read | A summary of a page: purpose, key points, what looks outdated |
+| `summarize_space` | read | An overview of a space: what it covers, how it is organised, its gaps |
+| `answer_from_wiki` | read | An answer only from wiki pages, with links to them |
+| `whats_new` | read | What changed in the wiki or in a space in the last days, page by page |
+| `draft_page` | write | A draft page on a topic, after checking for existing ones; created once you agree |
+| `tidy_page` | write | Better structure and wording of a page without changing its facts; written once you agree |
+
+A prompt only writes the request; the model does the work with the tools the
+connection is allowed to use. Resource reads count against
+`TOOL_CALLS_PER_MINUTE` and go to the audit log as `read_resource`.
+
 ## Security model
 
 Members sign in with their own Docmost account; everything a client does is
@@ -430,7 +454,7 @@ IMAGE_TAG=1.0.0 docker compose up -d
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |
-| `TOOL_CALLS_PER_MINUTE` | no | `60` | Tool calls one member may make per minute, over all their clients |
+| `TOOL_CALLS_PER_MINUTE` | no | `60` | Tool calls and resource reads one member may make per minute, over all their clients |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |

@@ -7,6 +7,23 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Added
+
+- MCP resources: `docmost://spaces` and `docmost://pages/{page}`, a page as
+  Markdown with its place and link, for clients that let people attach
+  resources. While a title is typed, argument completion offers the member's
+  matching pages, and spaces for `space` arguments.
+- MCP prompts: `summarize_page`, `summarize_space`, `answer_from_wiki` and
+  `whats_new`, and with the `write` scope `draft_page` and `tidy_page`, which
+  ask for confirmation before writing.
+- Pages can also be given as the last part of their URL
+  (`getting-started-a1B2c3D4e5`).
+
+### Changed
+
+- Resource reads share the tool call rate limit and are written to the audit
+  log as `read_resource`.
+
 ## [1.1.0] - 2026-10-26
 
 ### Added
