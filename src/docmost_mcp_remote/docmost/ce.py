@@ -38,6 +38,8 @@ from docmost_mcp_remote.docmost.models import (
     Group,
     HistoryEntry,
     HistoryVersion,
+    Invitation,
+    InviteRole,
     Label,
     LinkedPage,
     Page,
@@ -49,6 +51,7 @@ from docmost_mcp_remote.docmost.models import (
     SpaceRole,
     Suggestions,
     WorkspaceMember,
+    WorkspaceRole,
 )
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc, with_mentions
 from docmost_mcp_remote.docmost.version import VersionCheck, check_version
@@ -406,6 +409,64 @@ class CeDocmostSession:
             body["query"] = query
         data = await self._call("groups", body)
         return _paginated(data, [Group.model_validate(item) for item in _items(data)])
+
+    async def group_members(
+        self, group_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]:
+        data = await self._call(
+            "groups/members", {"groupId": group_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+
+    async def create_group(
+        self, name: str, *, description: str | None = None, user_ids: list[str] | None = None
+    ) -> Group:
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if user_ids:
+            body["userIds"] = user_ids
+        return Group.model_validate(await self._call("groups/create", body))
+
+    async def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> Group:
+        body: dict[str, Any] = {"groupId": group_id}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        return Group.model_validate(await self._call("groups/update", body))
+
+    async def add_group_members(self, group_id: str, user_ids: list[str]) -> None:
+        await self._call("groups/members/add", {"groupId": group_id, "userIds": user_ids})
+
+    async def invitations(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Invitation]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if query:
+            body["query"] = query
+        data = await self._call("workspace/invites", body)
+        return _paginated(data, [Invitation.model_validate(item) for item in _items(data)])
+
+    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None:
+        await self._call(
+            "workspace/invites/create", {"emails": emails, "role": role, "groupIds": group_ids}
+        )
+
+    async def resend_invitation(self, invitation_id: str) -> None:
+        await self._call("workspace/invites/resend", {"invitationId": invitation_id})
+
+    async def revoke_invitation(self, invitation_id: str) -> None:
+        await self._call("workspace/invites/revoke", {"invitationId": invitation_id})
+
+    async def change_workspace_role(self, user_id: str, role: WorkspaceRole) -> None:
+        await self._call("workspace/members/change-role", {"userId": user_id, "role": role})
+
+    async def set_member_active(self, user_id: str, active: bool) -> None:
+        path = "workspace/members/activate" if active else "workspace/members/deactivate"
+        await self._call(path, {"userId": user_id})
 
     async def list_pages(
         self,

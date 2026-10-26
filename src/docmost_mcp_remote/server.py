@@ -37,6 +37,7 @@ from docmost_mcp_remote.tools import (
     labels,
     manage,
     navigate,
+    people,
     prompts,
     read,
     resources,
@@ -156,6 +157,7 @@ def create_server(
     manage.register(mcp, settings, members)
     navigate.register(mcp, settings, members)
     health.register(mcp, settings, members)
+    people.register(mcp, settings, members)
     files.register(mcp, settings, members, snapshots, links)
     resources.register(mcp, settings, members)
     prompts.register(mcp)
