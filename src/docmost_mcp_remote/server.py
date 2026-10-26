@@ -32,6 +32,7 @@ from docmost_mcp_remote.oauth import DocmostOAuthProvider
 from docmost_mcp_remote.tools import (
     account,
     files,
+    health,
     history,
     labels,
     manage,
@@ -155,6 +156,7 @@ def create_server(
     labels.register(mcp, settings, members)
     manage.register(mcp, settings, members)
     navigate.register(mcp, settings, members)
+    health.register(mcp, settings, members)
     people.register(mcp, settings, members)
     files.register(mcp, settings, members, snapshots, links)
     resources.register(mcp, settings, members)

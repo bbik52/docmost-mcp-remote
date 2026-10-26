@@ -16,6 +16,10 @@ when upgrading lists it under "Upgrade notes".
 - MCP prompts: `summarize_page`, `summarize_space`, `answer_from_wiki` and
   `whats_new`, and with the `write` scope `draft_page` and `tidy_page`, which
   ask for confirmation before writing.
+- `check_space_health`: a health check of one space with pages not updated
+  for a given number of days, empty and untitled pages, pages sharing a title,
+  links and @-mentions to pages that are gone or in Trash, and who updated
+  most pages.
 - Workspace people, with the `admin` scope: `create_group`, `update_group`,
   `add_group_members`, `invite_people`, `resend_invitation`,
   `revoke_invitation`, `change_workspace_role`, `deactivate_member` and
