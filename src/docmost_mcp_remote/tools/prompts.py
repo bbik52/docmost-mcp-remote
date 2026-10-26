@@ -46,8 +46,9 @@ def summarize_space_text(space: str) -> str:
             "get_page_tree, and read the top-level pages and any others you need with "
             "get_page.",
             "Describe what the space covers, how it is organised (the main sections, with "
-            "links) and its gaps: missing topics, empty or very short pages, duplicates. Keep "
-            "it to one screen.",
+            "links) and its gaps: missing topics, empty or very short pages, duplicates. "
+            "check_space_health lists stale and empty pages, repeated titles and broken links. "
+            "Keep it to one screen.",
             f"{_SAME_LANGUAGE} {_UNTRUSTED}",
         ]
     )

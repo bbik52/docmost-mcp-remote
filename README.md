@@ -79,6 +79,7 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `get_space` | read | One space: description, visibility, member count, your role |
 | `list_pages` | read | Page tree of a space, one level at a time |
 | `get_page_tree` | read | Several levels of the page tree in one call, within depth and size limits |
+| `check_space_health` | read | Stale, empty and untitled pages, duplicate titles, broken links and top editors of a space |
 | `recent_pages` | read | Recently updated pages |
 | `get_page` | read | One page as Markdown, or as ProseMirror JSON with all formatting, by id, slug id or Docmost URL |
 | `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
