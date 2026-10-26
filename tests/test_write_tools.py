@@ -700,6 +700,17 @@ def test_add_comment(server: RunningServer, token: str, docmost: FakeDocmost) ->
     assert "Looks good" in sent["content"]
 
 
+def test_trash_asks_the_person(server: RunningServer, docmost: FakeDocmost) -> None:
+    token = server.token(scopes=("write", "delete"))
+    asked: list[str] = []
+    with pytest.raises(ToolError, match="the person declined"):
+        server.call_asked(token, "trash_page", {"page": "p1"}, answer=False, asked=asked)
+    assert asked == ['Move the page "Guide" and its child pages to the Trash?']
+    assert docmost.requests("pages/delete") == []
+    server.call_asked(token, "trash_page", {"page": "p1"}, answer=True, asked=asked)
+    assert docmost.requests("pages/delete") == [{"pageId": "p1"}]
+
+
 def test_add_comment_with_mentions(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
     people = [
         {"id": "u2", "name": "Boris", "email": "boris@example.com"},

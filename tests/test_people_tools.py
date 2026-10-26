@@ -134,3 +134,40 @@ def test_workspace_role_and_deactivation(server: RunningServer, mock: Recorder) 
     assert _last(mock, "/api/workspace/members/deactivate") == {"userId": "u2"}
     assert server.call(token, "activate_member", {"user": "u2"})["deactivated"] is False
     assert _last(mock, "/api/workspace/members/activate") == {"userId": "u2"}
+
+
+@pytest.mark.parametrize("mode", ["auto", "legacy"])
+def test_risky_changes_ask_the_person(server: RunningServer, mock: Recorder, mode: str) -> None:
+    token = server.token(scopes=("admin",))
+    asked: list[str] = []
+    args = {"user": "boris@example.com"}
+    data = server.call_asked(token, "deactivate_member", args, answer=True, asked=asked, mode=mode)
+    assert data["deactivated"] is True
+    assert asked == [
+        "Deactivate boris@example.com in Docmost? They are signed out and cannot sign in "
+        "until they are activated again."
+    ]
+    sent = [r for r in mock.requests if r.url.path == "/api/workspace/members/deactivate"]
+    assert len(sent) == 1
+
+    with pytest.raises(ToolError, match="the person declined"):
+        server.call_asked(
+            token,
+            "invite_people",
+            {"emails": ["new@example.com"]},
+            answer=False,
+            asked=asked,
+            mode=mode,
+        )
+    assert asked[-1].startswith("Invite new@example.com to the Docmost workspace as member?")
+    assert not [r for r in mock.requests if r.url.path == "/api/workspace/invites/create"]
+
+
+def test_nothing_to_ask_when_everyone_is_invited(server: RunningServer) -> None:
+    token = server.token(scopes=("admin",))
+    asked: list[str] = []
+    data = server.call_asked(
+        token, "invite_people", {"emails": ["anna@example.com"]}, answer=False, asked=asked
+    )
+    assert data["already_members"] == ["anna@example.com"]
+    assert asked == []

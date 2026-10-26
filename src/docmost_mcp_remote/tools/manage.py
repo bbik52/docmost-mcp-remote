@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any
 
+import mcp_types as mt
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
@@ -21,6 +22,7 @@ from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import Group, Space, SpaceRole, WorkspaceMember
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 
@@ -253,16 +255,27 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         role: Role,
         users: Annotated[list[str] | None, Field(max_length=25)] = None,
         groups: Annotated[list[str] | None, Field(max_length=25)] = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
         users = users or []
         groups = groups or []
         if not users and not groups:
             raise ToolError("Give at least one user or group.")
 
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             await policy.check(backend, space_id)
             user_ids = await _user_ids(backend, users)
             group_ids = await _group_ids(backend, groups)
+
+            async def question() -> str:
+                space = await backend.get_space(space_id)
+                return (
+                    f"Give {', '.join([*users, *groups])} the role {role} in the space "
+                    f"{named(space.name)}?"
+                )
+
+            asked = await confirm(question)
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.add_space_members(space_id, role, user_ids=user_ids, group_ids=group_ids)
             return {
                 "space_id": space_id,
@@ -287,14 +300,23 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         role: Role,
         user: str | None = None,
         group: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
         if (user is None) == (group is None):
             raise ToolError("Give either user or group.")
 
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             await policy.check(backend, space_id)
             user_id = (await _user_ids(backend, [user]))[0] if user else None
             group_id = (await _group_ids(backend, [group]))[0] if group else None
+
+            async def question() -> str:
+                space = await backend.get_space(space_id)
+                where = named(space.name)
+                return f"Change the role of {user or group} in the space {where} to {role}?"
+
+            asked = await confirm(question)
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.change_space_member_role(
                 space_id, role, user_id=user_id, group_id=group_id
             )
