@@ -81,6 +81,35 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         return await as_member(members, action)
 
     @mcp.tool(
+        name="get_space",
+        description=(
+            "Details of one space: name, description, visibility, number of members and your "
+            "role in it."
+        ),
+        annotations=_READ_ONLY,
+        auth=require_scopes("read"),
+    )
+    async def get_space(
+        space_id: Annotated[str, Field(description="Space id from list_spaces.")],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await policy.check(backend, space_id)
+            space = await backend.get_space(space_id)
+            return {
+                "id": space.id,
+                "name": space.name,
+                "slug": space.slug,
+                "description": space.description or None,
+                "visibility": space.visibility,
+                "member_count": space.member_count,
+                "your_role": space.member_role,
+                "created_at": space.created_at.isoformat() if space.created_at else None,
+                "url": f"{docmost_base}/s/{space.slug}" if space.slug else None,
+            }
+
+        return await as_member(members, action)
+
+    @mcp.tool(
         name="list_pages",
         description=(
             "List pages of a space as a tree, one level at a time: without parent_page_id the "

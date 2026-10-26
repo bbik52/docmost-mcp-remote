@@ -6,7 +6,6 @@ import uuid
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from tests.harness import RunningServer
 from tests.integration.conftest import DOCMOST_URL, MEMBER
@@ -14,15 +13,21 @@ from tests.integration.conftest import DOCMOST_URL, MEMBER
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
-def server(engine: AsyncEngine, tokens: dict[str, str]) -> Iterator[RunningServer]:
+@pytest.fixture(scope="module")
+def server(migrated_database: str, tokens: dict[str, str]) -> Iterator[RunningServer]:
+    # One server and one sign-in for the whole module: Docmost allows about ten
+    # sign-ins per minute.
     with RunningServer(docmost_url=DOCMOST_URL, docmost_allow_insecure_http=True) as running:
         yield running
 
 
-def test_write_tools(server: RunningServer) -> None:
+@pytest.fixture(scope="module")
+def token(server: RunningServer) -> str:
+    return server.token(scopes=("write", "delete"), email=MEMBER[0], password=MEMBER[1])
+
+
+def test_write_tools(server: RunningServer, token: str) -> None:
     unique = uuid.uuid4().hex[:10]
-    token = server.token(scopes=("write", "delete"), email=MEMBER[0], password=MEMBER[1])
     spaces = server.call(token, "list_spaces")["spaces"]
     general = next(space["id"] for space in spaces if space["slug"] == "general")
 
@@ -104,3 +109,41 @@ def test_write_tools(server: RunningServer) -> None:
     assert sibling["id"] in {item["id"] for item in trash}
     server.call(token, "restore_page", {"page": sibling["id"]})
     assert server.call(token, "get_page", {"page": sibling["id"]})["in_trash"] is False
+
+
+def test_copy_and_move_between_spaces(server: RunningServer, token: str) -> None:
+    unique = uuid.uuid4().hex[:10]
+    spaces = {space["slug"]: space["id"] for space in server.call(token, "list_spaces")["spaces"]}
+    general, other = spaces["general"], spaces["other"]
+    assert server.call(token, "get_space", {"space_id": other})["your_role"] == "writer"
+
+    page = server.call(
+        token,
+        "create_page",
+        {"space_id": general, "title": f"Copy me {unique}", "content": f"Body {unique}"},
+    )
+    server.call(
+        token,
+        "create_page",
+        {"space_id": general, "title": f"Child {unique}", "parent_page_id": page["id"]},
+    )
+    copy = server.call(token, "duplicate_page", {"page": page["id"]})
+    assert copy["title"] == f"Copy of Copy me {unique}"
+    assert copy["copied_child_pages"] == 1
+    assert f"Body {unique}" in server.call(token, "get_page", {"page": copy["id"]})["content"]
+
+    elsewhere = server.call(token, "duplicate_page", {"page": page["id"], "target_space_id": other})
+    assert elsewhere["space_id"] == other
+    assert elsewhere["title"] == f"Copy me {unique}"
+
+    moved = server.call(token, "move_page_to_space", {"page": copy["id"], "space_id": other})
+    assert moved["space_id"] == other
+    assert server.call(token, "get_page", {"page": copy["id"]})["space"]["id"] == other
+
+    comment = server.call(token, "add_comment", {"page": page["id"], "text": "Draft"})
+    edited = server.call(
+        token, "update_comment", {"comment_id": comment["id"], "text": f"Final {unique}"}
+    )
+    assert "Draft" in edited["previous_text"]
+    comments = server.call(token, "list_comments", {"page_id": page["id"]})["comments"]
+    assert f"Final {unique}" in comments[0]["text"]

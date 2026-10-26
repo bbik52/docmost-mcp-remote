@@ -67,6 +67,19 @@ CI run. Nothing here is copied from Docmost or from other clients.
   characters), a base-62 fraction, and siblings sorted by plain byte order.
   The server builds keys between neighbours itself
   (`docmost/positions.py`).
+- `pages/duplicate` with `pageId` copies the page and its child pages next
+  to the original and prefixes the copy's title with "Copy of "; with
+  `spaceId` of another space it copies them to the end of that space's top
+  level under the same title. Both answer with the new top page and
+  `childPageIds`. Labels and attachments are copied, comments are not.
+- `pages/move-to-space` with `pageId` and `spaceId` moves the page and the
+  child pages the member can access to the top level of the other space; the
+  same space answers `400 Page is already in this space`.
+
+## Spaces
+
+- `spaces/info` with `spaceId` returns the space with `memberCount` and the
+  member's `membership.role`.
 
 ## Trash
 
@@ -83,6 +96,12 @@ CI run. Nothing here is copied from Docmost or from other clients.
 - `comments/create` takes `pageId`, optional `parentCommentId`, and
   `content` as a **JSON string** of a ProseMirror document; plain text is
   refused with `400`.
+- `comments/info` with `commentId` returns one comment with its `pageId`,
+  `spaceId` and `creatorId`.
+- `comments/update` with `commentId` and `content` (a JSON string, as for
+  create) changes a comment; Docmost answers `403 You can only edit your own
+  comments` for comments of other people. `comments/delete` deletes
+  permanently, so the server does not use it.
 - `comments/resolve` answers `403 This feature requires a valid license.`
   on CE. Resolving comments is an Enterprise feature and is out of scope.
 

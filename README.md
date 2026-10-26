@@ -74,6 +74,7 @@ password.
 |---|---|---|
 | `whoami` | read | The Docmost account, scopes and Docmost version of this connection |
 | `list_spaces` | read | Spaces you can access, with your role |
+| `get_space` | read | One space: description, visibility, member count, your role |
 | `list_pages` | read | Page tree of a space, one level at a time |
 | `recent_pages` | read | Recently updated pages |
 | `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
@@ -85,7 +86,10 @@ password.
 | `update_page` | write | Append, prepend or replace a page body with Markdown |
 | `rename_page` | write | Change a page title |
 | `move_page` | write | Move a page within its space, to the start, the end or after a sibling |
+| `move_page_to_space` | write | Move a page with its children to another space |
+| `duplicate_page` | write | Copy a page with its children, in the same space or into another one |
 | `add_comment` | write | Comment on a page or reply to a comment |
+| `update_comment` | write | Change the text of one of your own comments |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
 | `trash_page` | delete | Move a page to the Trash |
 | `restore_page` | delete | Restore a page from the Trash |

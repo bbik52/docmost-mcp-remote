@@ -13,6 +13,7 @@ from typing import Protocol
 from docmost_mcp_remote.docmost.models import (
     BodyOperation,
     Comment,
+    CopiedPage,
     CurrentUser,
     Page,
     PageSummary,
@@ -31,6 +32,8 @@ class DocmostBackend(Protocol):
     async def list_spaces(
         self, *, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Space]: ...
+
+    async def get_space(self, space_id: str) -> Space: ...
 
     async def list_pages(
         self,
@@ -76,9 +79,17 @@ class DocmostBackend(Protocol):
         self, page_id: str, *, parent_page_id: str | None, position: str
     ) -> None: ...
 
+    async def move_page_to_space(self, page_id: str, space_id: str) -> None: ...
+
+    async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage: ...
+
+    async def get_comment(self, comment_id: str) -> Comment: ...
+
     async def create_comment(
         self, page_id: str, text: str, *, parent_comment_id: str | None = None
     ) -> Comment: ...
+
+    async def update_comment(self, comment_id: str, text: str) -> Comment: ...
 
     async def list_trash(
         self, space_id: str, *, cursor: str | None = None, limit: int = 50

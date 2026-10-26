@@ -7,6 +7,15 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Added
+
+- `get_space`: details of one space, with its member count and your role.
+- `duplicate_page`: copy a page with its child pages, in the same space or
+  into another space.
+- `move_page_to_space`: move a page with its child pages to another space.
+- `update_comment`: change the text of one of your own comments; the
+  previous text is returned.
+
 ### Changed
 
 - README: a note near the top that the project is independent from

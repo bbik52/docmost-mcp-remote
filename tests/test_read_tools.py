@@ -50,6 +50,15 @@ def _routes() -> dict[str, Handler | httpx.Response]:
     routes.update(
         {
             "/api/spaces": ok({"items": [GENERAL, SECRET], "meta": {"hasNextPage": False}}),
+            "/api/spaces/info": ok(
+                {
+                    **GENERAL,
+                    "description": "Team wiki",
+                    "visibility": "private",
+                    "memberCount": 7,
+                    "createdAt": "2026-01-02T03:04:05Z",
+                }
+            ),
             "/api/pages/sidebar-pages": ok(
                 {"items": [_page("p1", hasChildren=True)], "meta": {"hasNextPage": False}}
             ),
@@ -112,6 +121,7 @@ def restricted(engine: AsyncEngine, mock: Recorder) -> Iterator[RunningServer]:
 def test_tool_list(server: RunningServer) -> None:
     assert server.tools(server.token()) == [
         "get_page",
+        "get_space",
         "list_comments",
         "list_pages",
         "list_snapshots",
@@ -128,6 +138,15 @@ def test_list_spaces(server: RunningServer) -> None:
     assert [space["slug"] for space in data["spaces"]] == ["general", "secret"]
     assert data["spaces"][0]["your_role"] == "writer"
     assert data["next_cursor"] is None
+
+
+def test_get_space(server: RunningServer, mock: Recorder) -> None:
+    data = server.call(server.token(), "get_space", {"space_id": "s1"})
+    assert data["member_count"] == 7
+    assert data["your_role"] == "writer"
+    assert data["description"] == "Team wiki"
+    assert data["url"] == "https://docs.example.com/s/general"
+    assert mock.body() == {"spaceId": "s1"}
 
 
 def test_list_pages(server: RunningServer, mock: Recorder) -> None:
@@ -186,6 +205,7 @@ def test_allowed_spaces(restricted: RunningServer) -> None:
     for tool, args in [
         ("get_page", {"page": "p2"}),
         ("list_pages", {"space_id": "s2"}),
+        ("get_space", {"space_id": "s2"}),
         ("recent_pages", {"space_id": "s2"}),
         ("search", {"query": "x", "space_id": "s2"}),
         ("list_comments", {"page_id": "p2"}),

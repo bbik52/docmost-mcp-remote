@@ -26,6 +26,7 @@ from docmost_mcp_remote.docmost.errors import (
 from docmost_mcp_remote.docmost.models import (
     BodyOperation,
     Comment,
+    CopiedPage,
     CurrentUser,
     Page,
     PageSummary,
@@ -231,6 +232,10 @@ class CeDocmostSession:
         data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})
         return _paginated(data, [Space.from_api(item) for item in _items(data)])
 
+    async def get_space(self, space_id: str) -> Space:
+        data = await self._call("spaces/info", {"spaceId": space_id})
+        return Space.from_api(data)
+
     async def list_pages(
         self,
         space_id: str,
@@ -311,6 +316,20 @@ class CeDocmostSession:
             {"pageId": page_id, "parentPageId": parent_page_id, "position": position},
         )
 
+    async def move_page_to_space(self, page_id: str, space_id: str) -> None:
+        await self._call("pages/move-to-space", {"pageId": page_id, "spaceId": space_id})
+
+    async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage:
+        body: dict[str, Any] = {"pageId": page_id}
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("pages/duplicate", body)
+        return CopiedPage.model_validate(data)
+
+    async def get_comment(self, comment_id: str) -> Comment:
+        data = await self._call("comments/info", {"commentId": comment_id})
+        return Comment.from_api(data)
+
     async def create_comment(
         self, page_id: str, text: str, *, parent_comment_id: str | None = None
     ) -> Comment:
@@ -318,6 +337,13 @@ class CeDocmostSession:
         if parent_comment_id:
             body["parentCommentId"] = parent_comment_id
         data = await self._call("comments/create", body)
+        return Comment.from_api(data)
+
+    async def update_comment(self, comment_id: str, text: str) -> Comment:
+        data = await self._call(
+            "comments/update",
+            {"commentId": comment_id, "content": json.dumps(text_to_doc(text))},
+        )
         return Comment.from_api(data)
 
     async def list_trash(

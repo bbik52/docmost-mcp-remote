@@ -51,6 +51,8 @@ class Space(_Model):
     description: str | None = None
     visibility: str | None = None
     member_role: str | None = None
+    member_count: int | None = Field(default=None, alias="memberCount")
+    created_at: datetime | None = Field(default=None, alias="createdAt")
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Space:
@@ -92,6 +94,13 @@ class Page(_PageBase):
         )
 
 
+class CopiedPage(_PageBase):
+    """The top page of a copy made by ``pages/duplicate``."""
+
+    space: SpaceRef | None = None
+    child_page_ids: list[str] = Field(default_factory=list, alias="childPageIds")
+
+
 class SearchHit(_PageBase):
     highlight: str | None = None
     rank: float | None = None
@@ -109,6 +118,8 @@ class Comment(_Model):
     id: str
     page_id: str = Field(alias="pageId")
     parent_comment_id: str | None = Field(default=None, alias="parentCommentId")
+    space_id: str | None = Field(default=None, alias="spaceId")
+    creator_id: str | None = Field(default=None, alias="creatorId")
     text: str = ""
     creator: UserRef | None = None
     created_at: datetime | None = Field(default=None, alias="createdAt")

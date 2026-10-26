@@ -32,6 +32,11 @@ class FakeDocmost:
 
     def __init__(self) -> None:
         self.pages: dict[str, dict[str, Any]] = {}
+        self.comments: dict[str, dict[str, Any]] = {
+            "c1": self.comment("c1", "p1", "docmost-user-1", "Old text"),
+            "c2": self.comment("c2", "p1", "someone-else", "Not mine"),
+            "c3": self.comment("c3", "p3", "docmost-user-1", "Other space"),
+        }
         self.apply_body_updates = True
         self.recorder = Recorder(self.routes())
         self.add("p1", "Guide", "# Guide\n\nIntro", position="a0VVV")
@@ -49,6 +54,18 @@ class FakeDocmost:
             "position": "a0VVV",
             "deletedAt": None,
             **extra,
+        }
+
+    def comment(self, comment_id: str, page_id: str, creator_id: str, text: str) -> dict[str, Any]:
+        return {
+            "id": comment_id,
+            "pageId": page_id,
+            "spaceId": "s2" if page_id == "p3" else "s1",
+            "creatorId": creator_id,
+            "content": {
+                "type": "doc",
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+            },
         }
 
     def requests(self, path: str) -> list[dict[str, Any]]:
@@ -157,6 +174,41 @@ class FakeDocmost:
                 }
             )
 
+        def comment_info(request: httpx.Request) -> httpx.Response:
+            found = self.comments.get(body(request)["commentId"])
+            return ok(found) if found else error(404, "Comment not found")
+
+        def comment_update(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            found = self.comments[data["commentId"]]
+            if found["creatorId"] != "docmost-user-1":
+                return error(403, "You can only edit your own comments")
+            found["content"] = json.loads(data["content"])
+            return ok(found)
+
+        def duplicate(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            source = self.pages[data["pageId"]]
+            page_id = f"n{len(self.pages)}"
+            same_space = "spaceId" not in data
+            self.add(
+                page_id,
+                f"Copy of {source['title']}" if same_space else source["title"],
+                source["content"],
+                spaceId=data.get("spaceId", source["spaceId"]),
+                parentPageId=source["parentPageId"] if same_space else None,
+            )
+            return ok({**self.pages[page_id], "childPageIds": ["n-child"]})
+
+        def move_to_space(request: httpx.Request) -> httpx.Response:
+            data = body(request)
+            page = self.pages[data["pageId"]]
+            if page["spaceId"] == data["spaceId"]:
+                return error(400, "Page is already in this space")
+            page["spaceId"] = data["spaceId"]
+            page["parentPageId"] = None
+            return httpx.Response(200, json={"success": True, "status": 200})
+
         routes.update(
             {
                 "/api/spaces": ok({"items": SPACES, "meta": {"hasNextPage": False}}),
@@ -170,6 +222,10 @@ class FakeDocmost:
                 "/api/pages/restore": restore,
                 "/api/pages/trash": trashed,
                 "/api/comments/create": comment,
+                "/api/comments/info": comment_info,
+                "/api/comments/update": comment_update,
+                "/api/pages/duplicate": duplicate,
+                "/api/pages/move-to-space": move_to_space,
             }
         )
         return routes
@@ -202,7 +258,16 @@ def token(server: RunningServer) -> str:
 def test_read_grant_cannot_write(server: RunningServer) -> None:
     read_only = server.token()
     tools = server.tools(read_only)
-    for name in ("create_page", "update_page", "move_page", "add_comment", "trash_page"):
+    for name in (
+        "create_page",
+        "update_page",
+        "move_page",
+        "move_page_to_space",
+        "duplicate_page",
+        "add_comment",
+        "update_comment",
+        "trash_page",
+    ):
         assert name not in tools
     with pytest.raises(ToolError):
         server.call(read_only, "update_page", {"page": "p1", "content": "x"})
@@ -386,7 +451,76 @@ def test_move_page_refusals(server: RunningServer, token: str) -> None:
         server.call(token, "move_page", {"page": "p1", "after_page_id": "p3"})
 
 
+# Copies and other spaces
+
+
+def test_duplicate_page_in_same_space(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    data = server.call(token, "duplicate_page", {"page": "p1"})
+    assert data["title"] == "Copy of Guide"
+    assert data["source_page_id"] == "p1"
+    assert data["space_id"] == "s1"
+    assert data["copied_child_pages"] == 1
+    assert docmost.requests("pages/duplicate") == [{"pageId": "p1"}]
+    assert docmost.pages[data["id"]]["content"] == "# Guide\n\nIntro"
+
+
+def test_duplicate_page_to_other_space(
+    server: RunningServer, token: str, docmost: FakeDocmost
+) -> None:
+    data = server.call(token, "duplicate_page", {"page": "p1", "target_space_id": "s2"})
+    assert data["title"] == "Guide"
+    assert data["space_id"] == "s2"
+    assert docmost.requests("pages/duplicate") == [{"pageId": "p1", "spaceId": "s2"}]
+    # The same space as the source means a plain duplicate.
+    server.call(token, "duplicate_page", {"page": "p1", "target_space_id": "s1"})
+    assert docmost.requests("pages/duplicate")[-1] == {"pageId": "p1"}
+
+
+def test_move_page_to_space(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "move_page_to_space", {"page": "p2", "space_id": "s2"})
+    assert data["space_id"] == "s2"
+    assert data["previous_space_id"] == "s1"
+    assert docmost.pages["p2"]["spaceId"] == "s2"
+    with pytest.raises(ToolError, match="already in this space"):
+        server.call(token, "move_page_to_space", {"page": "p2", "space_id": "s2"})
+
+
+def test_copies_respect_space_restriction(engine: AsyncEngine, docmost: FakeDocmost) -> None:
+    with RunningServer(docmost.recorder.client(), allowed_spaces="general") as server:
+        token = server.token(scopes=("write",))
+        for tool, arguments in (
+            ("duplicate_page", {"page": "p1", "target_space_id": "s2"}),
+            ("duplicate_page", {"page": "p3"}),
+            ("move_page_to_space", {"page": "p1", "space_id": "s2"}),
+            ("move_page_to_space", {"page": "p3", "space_id": "s1"}),
+            ("update_comment", {"comment_id": "c3", "text": "x"}),
+        ):
+            with pytest.raises(ToolError, match="not found"):
+                server.call(token, tool, arguments)
+    assert docmost.requests("pages/duplicate") == []
+    assert docmost.requests("pages/move-to-space") == []
+    assert docmost.requests("comments/update") == []
+
+
 # Comments and Trash
+
+
+def test_update_comment(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    data = server.call(token, "update_comment", {"comment_id": "c1", "text": "New text"})
+    assert data["id"] == "c1"
+    assert data["page_id"] == "p1"
+    assert "Old text" in data["previous_text"]
+    assert data["previous_text"].startswith("<docmost-untrusted-content")
+    assert "New text" in docmost.requests("comments/update")[-1]["content"]
+
+
+def test_update_comment_of_someone_else(server: RunningServer, token: str) -> None:
+    with pytest.raises(ToolError, match="only edit your own comments"):
+        server.call(token, "update_comment", {"comment_id": "c2", "text": "x"})
+    with pytest.raises(ToolError, match="Comment not found"):
+        server.call(token, "update_comment", {"comment_id": "missing", "text": "x"})
 
 
 def test_add_comment(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
