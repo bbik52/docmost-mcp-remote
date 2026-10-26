@@ -101,6 +101,18 @@ class CopiedPage(_PageBase):
     child_page_ids: list[str] = Field(default_factory=list, alias="childPageIds")
 
 
+class LinkedPage(_PageBase):
+    """A page in a backlink or label listing."""
+
+    space: SpaceRef | None = None
+    updated_at: datetime | None = Field(default=None, alias="updatedAt")
+
+
+class Label(_Model):
+    id: str
+    name: str
+
+
 class SearchHit(_PageBase):
     highlight: str | None = None
     rank: float | None = None
@@ -168,3 +180,4 @@ class Paginated[T](_Model):
 
 
 BodyOperation = Literal["append", "prepend", "replace"]
+BacklinkDirection = Literal["incoming", "outgoing"]

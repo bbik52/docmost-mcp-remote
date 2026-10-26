@@ -98,6 +98,30 @@ CI run. Nothing here is copied from Docmost or from other clients.
   ProseMirror JSON, which lets the server diff it against a version with
   the same conversion on both sides.
 
+## Labels and backlinks
+
+- Added in Docmost 0.90. On older versions the endpoints answer 404
+  `Cannot POST /api/...`; the server checks the version first.
+- `labels` with `type: "page"` lists the workspace's page labels;
+  `pages/labels` lists the labels of one page; `labels/pages` with
+  `name` and `spaceId` lists pages with a label.
+- `pages/labels/add` takes `pageId` and `names` (created when missing);
+  `pages/labels/remove` takes `pageId` and `labelId`.
+- `pages/backlinks` takes `pageId` and `direction` (`incoming` or
+  `outgoing`).
+- Backlinks are recorded when Docmost saves a page version (see Page
+  history), from page mentions and from link marks with `internal: true`.
+  Markdown import never sets `internal`, but it keeps inline HTML and reads
+  `data-internal="true"` on `<a>`; the server rewrites links to pages of the
+  same Docmost into such tags before sending a body.
+
+## Search filters
+
+- `search` accepts `creatorId` since 0.70, and `titleOnly` and `labelIds`
+  since 0.96. Older versions strip unknown fields silently, so the server
+  refuses these filters on older versions rather than returning unfiltered
+  results.
+
 ## Spaces
 
 - `spaces/info` with `spaceId` returns the space with `memberCount` and the

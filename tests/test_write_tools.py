@@ -299,6 +299,8 @@ def test_read_grant_cannot_write(server: RunningServer) -> None:
         "add_comment",
         "update_comment",
         "replace_section",
+        "add_labels",
+        "remove_label",
         "trash_page",
     ):
         assert name not in tools

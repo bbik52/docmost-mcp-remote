@@ -26,6 +26,14 @@ when upgrading lists it under "Upgrade notes".
   body, a version and a snapshot. Versions are stored by Docmost as
   ProseMirror JSON; the server converts them to Markdown laid out like
   Docmost's own.
+- `list_backlinks`, `list_labels`, `find_pages_by_label`, `add_labels` and
+  `remove_label` (Docmost 0.90 or newer).
+- `search` takes `title_only` and `labels` (Docmost 0.96 or newer) and
+  `created_by_me`.
+- Links to pages of the same Docmost in Markdown written by the server are
+  stored as internal links, so Docmost counts them as backlinks.
+- Tools that need a newer Docmost than the connected one say so instead of
+  failing with a Docmost error.
 
 ### Changed
 

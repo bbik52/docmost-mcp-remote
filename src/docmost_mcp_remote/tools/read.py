@@ -13,13 +13,21 @@ from pydantic import Field
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import PageSummary
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import find_section, split_sections
-from docmost_mcp_remote.tools.common import as_member, page_link
+from docmost_mcp_remote.tools.common import (
+    all_labels,
+    as_member,
+    page_link,
+    require_version,
+)
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 from docmost_mcp_remote.tools.untrusted import NOTICE, truncate, wrap
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
+#: First release whose search takes titleOnly and labelIds.
+SEARCH_FILTERS_SINCE = Version(0, 96, 0)
 _TAGS = re.compile(r"<[^>]+>")
 _SLUG_ID = re.compile(r"^[A-Za-z0-9]{10}$")
 
@@ -282,7 +290,8 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         name="search",
         description=(
             "Full-text search over page titles and bodies you can access. Returns matching "
-            "pages with a short snippet; use get_page to read one."
+            "pages with a short snippet; use get_page to read one. Can be narrowed to titles, "
+            "labels or pages you created."
         ),
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
@@ -291,12 +300,42 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         query: Annotated[str, Field(min_length=1, max_length=500, description="Search words.")],
         space_id: Annotated[str | None, Field(description="Only search this space.")] = None,
         limit: Annotated[int, Field(ge=1, le=50)] = 20,
+        title_only: Annotated[
+            bool, Field(description="Match page titles only. Needs Docmost 0.96 or newer.")
+        ] = False,
+        labels: Annotated[
+            list[str] | None,
+            Field(
+                max_length=10,
+                description="Only pages with all these labels. Needs Docmost 0.96 or newer.",
+            ),
+        ] = None,
+        created_by_me: Annotated[bool, Field(description="Only pages you created.")] = False,
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             allowed = await policy.allowed_ids(backend)
             if space_id:
                 policy.ensure(allowed, space_id)
-            hits = await backend.search(query, space_id=space_id, limit=limit)
+            label_ids: list[str] | None = None
+            if title_only or labels:
+                # Older releases silently ignore these filters, so refuse instead.
+                await require_version(backend, SEARCH_FILTERS_SINCE)
+            if labels:
+                known = {label.name: label.id for label in await all_labels(backend)}
+                wanted = [name.strip().lower() for name in labels]
+                missing = [name for name in wanted if name not in known]
+                if missing:
+                    raise ToolError(f"Unknown labels: {', '.join(missing)}. See list_labels.")
+                label_ids = [known[name] for name in wanted]
+            creator_id = (await backend.current_user()).id if created_by_me else None
+            hits = await backend.search(
+                query,
+                space_id=space_id,
+                limit=limit,
+                title_only=title_only,
+                label_ids=label_ids,
+                creator_id=creator_id,
+            )
             return {
                 "notice": NOTICE,
                 "results": [
