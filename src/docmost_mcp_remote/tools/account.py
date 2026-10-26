@@ -8,17 +8,19 @@ from fastmcp import FastMCP
 from fastmcp.server.auth import require_scopes
 
 from docmost_mcp_remote.auth import current_scopes
+from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.tools.common import as_member
 
 
-def register(mcp: FastMCP, members: MemberService) -> None:
+def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
     @mcp.tool(
         name="whoami",
         description=(
             "Show which Docmost account this connection acts as, the scopes the member "
-            "granted to this client, and the Docmost version."
+            "granted to this client, the Docmost version, and the account page where the "
+            "member sees and revokes connected apps and tokens."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False},
         auth=require_scopes("read"),
@@ -33,6 +35,7 @@ def register(mcp: FastMCP, members: MemberService) -> None:
                 "docmost_role": user.role,
                 "scopes": sorted(current_scopes()),
                 "docmost_version": str(check.version) if check.version else "unknown",
+                "account_url": f"{settings.public_base}/account",
             }
 
         return await as_member(members, action)

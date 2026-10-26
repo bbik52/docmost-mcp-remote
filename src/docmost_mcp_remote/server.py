@@ -131,7 +131,7 @@ def create_server(
             route.endpoint
         )
 
-    account.register(mcp, members)
+    account.register(mcp, settings, members)
     read.register(mcp, settings, members)
     write.register(mcp, settings, members, snapshots)
     history.register(mcp, settings, members, snapshots)
