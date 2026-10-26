@@ -104,6 +104,7 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `export_space` | read | A download link to a zip of a whole space (space admins) |
 | `list_attachments` | read | Files uploaded to a page (Docmost 0.96+) |
 | `get_attachment` | read | Details of a file with a download link; small text files inline |
+| `get_upload_status` | read | Files sent to an upload link and whether they are in the page yet |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
 | `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
 | `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
@@ -115,7 +116,8 @@ newer; on older versions these tools answer that Docmost needs an upgrade.
 | `update_comment` | write | Change the text of one of your own comments |
 | `add_labels` | write | Add labels to a page (Docmost 0.90+) |
 | `remove_label` | write | Remove a label from a page (Docmost 0.90+) |
-| `upload_attachment` | write | Upload a file (base64, up to 10 MB) and add it to the end of the page |
+| `create_upload_link` | write | A link where the person drops files into a page in the browser, or the assistant sends them with `curl`; no tokens spent |
+| `upload_attachment` | write | Upload a file as base64 (up to 10 MB, about a million tokens per MB) and add it to the page |
 | `replace_page_json` | write | Replace a page body with ProseMirror JSON, checked against the editor schema first; `dry_run` shows a diff |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
 | `restore_page_version` | write | Put a page body back to a version from its history, formatting included |
@@ -145,6 +147,20 @@ cannot be saved, nothing is written. After the change it reads the page back
 and reports an error if Docmost did not apply it (this happens when Docmost
 runs with `COLLAB_DISABLE_REDIS`). Snapshots can hold content of pages that
 were later deleted in Docmost until they expire.
+
+### Adding files
+
+Passing a file to the model costs tokens: as base64, about a million per
+megabyte. So `create_upload_link` gives a one-time link to a page instead.
+The person opens it, drops in one or more files (or picks them), puts them in
+order and presses Done; the files appear in the page at the end, at the end
+of a section (`after_heading`) or after a paragraph (`after_text`). An
+assistant that can run commands sends files it has with `curl` to the same
+link. Until Done the files are kept on this server, encrypted; the link works
+for `UPLOAD_RETENTION_MINUTES` and whatever was not added by then is deleted.
+`upload_attachment` takes the same place parameters.
+
+<img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/upload.png" width="560" alt="The upload page: a drop area, three images and a PDF with arrows to reorder them, and a Done button">
 
 A change that rewrites the whole body (a replace, a section, a JSON write, a
 restore) is refused while someone else is editing the page, that is when
@@ -270,6 +286,8 @@ services:
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
+      UPLOAD_RETENTION_MINUTES: ${UPLOAD_RETENTION_MINUTES:-60}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
       # The port is published on 127.0.0.1 only, so every client is a local proxy.
@@ -481,6 +499,8 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |
+| `UPLOAD_RETENTION_MINUTES` | no | `60` | Minutes an upload link works; files not added to the page by then are deleted |
+| `UPLOAD_MAX_MB` | no | `50` | Largest total size of the files sent to one upload link |
 | `TOOL_CALLS_PER_MINUTE` | no | `60` | Tool calls and resource reads one member may make per minute, over all their clients |
 | `WEB_SESSION_HOURS` | no | `12` | Hours a sign-in to the account page lasts |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |

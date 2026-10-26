@@ -207,3 +207,52 @@ audit_log = Table(
 
 Index("ix_audit_log_created_at", audit_log.c.created_at)
 Index("ix_audit_log_member_id_created_at", audit_log.c.member_id, audit_log.c.created_at)
+
+#: Upload links: a page the member lets someone add files to, until expires_at.
+upload_links = Table(
+    "upload_links",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "member_id",
+        UUID(as_uuid=True),
+        ForeignKey("members.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    #: SHA-256 of the token in the link.
+    Column("token_hash", LargeBinary, nullable=False, unique=True),
+    Column("page_id", String(64), nullable=False),
+    #: Page title, link and where files go, encrypted with the link id as context.
+    Column("details", LargeBinary, nullable=False),
+    #: open, adding (files are going to Docmost), done.
+    Column("state", String(16), nullable=False),
+    #: Why the last attempt to add the files failed, or the outcome once done, JSON.
+    Column("outcome", Text),
+    _now(),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+)
+
+Index("ix_upload_links_expires_at", upload_links.c.expires_at)
+
+#: Files sent to an upload link. Content is kept, encrypted, only until it is in Docmost.
+upload_files = Table(
+    "upload_files",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "link_id",
+        UUID(as_uuid=True),
+        ForeignKey("upload_links.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("file_name", String(255), nullable=False),
+    Column("mime_type", String(255), nullable=False),
+    Column("size", Integer, nullable=False),
+    #: Order of arrival; the page gets the files in this order unless told otherwise.
+    Column("position", Integer, nullable=False),
+    Column("ciphertext", LargeBinary),
+    #: The Docmost attachment once uploaded there.
+    Column("attachment_id", String(64)),
+    _now(),
+)

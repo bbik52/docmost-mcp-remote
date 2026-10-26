@@ -132,6 +132,7 @@ def test_tool_list(server: RunningServer) -> None:
         "get_page_version",
         "get_section",
         "get_space",
+        "get_upload_status",
         "list_attachments",
         "list_backlinks",
         "list_comments",
