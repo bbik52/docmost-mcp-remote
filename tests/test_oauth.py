@@ -198,7 +198,7 @@ def test_metadata(flow: Flow) -> None:
     server = flow.http.get("/.well-known/oauth-authorization-server").json()
     assert server["code_challenge_methods_supported"] == ["S256"]
     assert server["registration_endpoint"] == f"{flow.public}/register"
-    assert set(server["scopes_supported"]) == {"read", "write", "delete"}
+    assert set(server["scopes_supported"]) == {"read", "write", "delete", "admin"}
 
 
 def test_unauthorized_mcp_points_to_metadata(flow: Flow) -> None:
@@ -237,7 +237,7 @@ def test_registration_refuses_bad_redirects(flow: Flow) -> None:
 
 
 def test_registration_refuses_unknown_scopes(flow: Flow) -> None:
-    response = flow.register(scope="read admin")
+    response = flow.register(scope="read superuser")
     assert response.status_code == 400
 
 

@@ -16,7 +16,7 @@
 
 **Grant** — the permission a Member gives one MCP client to act for them, limited by Scopes.
 
-**Scope** — a class of operations a Grant allows: `read`, `write`, `delete`. A new Grant is `read` only.
+**Scope** — a class of operations a Grant allows: `read`, `write`, `delete`, `admin`. A new Grant is `read` only.
 
 **Page content** — text of Docmost pages. Always treated as untrusted data, never as instructions for the model.
 

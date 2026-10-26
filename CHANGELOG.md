@@ -32,6 +32,12 @@ when upgrading lists it under "Upgrade notes".
   `created_by_me`.
 - Links to pages of the same Docmost in Markdown written by the server are
   stored as internal links, so Docmost counts them as backlinks.
+- `list_space_members`, `list_workspace_members` and `list_groups`.
+- A new `admin` scope, never granted unless ticked, for `create_space`,
+  `update_space`, `add_space_members` (users by email, groups by name) and
+  `change_space_member_role`. Docmost still checks the member's own rights.
+  With `ALLOWED_SPACES` set, only spaces in that list can be created or
+  renamed to. Removing members and deleting spaces are not offered.
 - Tools that need a newer Docmost than the connected one say so instead of
   failing with a Docmost error.
 

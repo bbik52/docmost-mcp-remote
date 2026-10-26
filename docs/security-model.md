@@ -54,7 +54,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Phishing through a client name on the consent page | The page shows the redirect host and the account; `write` and `delete` are never preselected | `web/templates/consent.html` |
 | Database leak | Sessions, passwords and snapshots are encrypted with a key that is not in the database; tokens are hashed | `crypto.py`, `db/snapshot_store.py` |
 | Key compromise | Rotation with `SECRET_KEY_PREVIOUS` and `admin rotate-key` | `admin.py`, `tests/test_admin.py` |
-| Prompt injection in page content | Content wrapped as untrusted data; scopes default to `read`; write tools take a snapshot first; delete only to Trash | `tools/untrusted.py`, `tools/write.py` |
+| Prompt injection in page content | Content wrapped as untrusted data; scopes default to `read`; write tools take a snapshot first; delete only to Trash; space management only with the separate `admin` scope, and no removal of members or spaces | `tools/untrusted.py`, `tools/write.py` |
 | Irreversible overwrite | Snapshot before every body write; the write is not done if the snapshot fails; `restore_snapshot` | `tools/write.py`, `tests/test_write_tools.py` |
 | Docmost accepting a write and dropping it | Read-back after every write; the call fails and names the snapshot | `tools/write.py` |
 | A runaway agent hammering Docmost | `TOOL_CALLS_PER_MINUTE` per member over all clients; page and list size limits | `guard.py`, `tests/test_guard.py` |
