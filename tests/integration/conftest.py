@@ -77,9 +77,40 @@ def _bootstrap() -> dict[str, str]:
     return tokens
 
 
+def _other_space(tokens: dict[str, str]) -> None:
+    """A second space, slug ``other``, where the member is a writer."""
+    api = httpx.Client(
+        base_url=f"{DOCMOST_URL}/api",
+        timeout=30,
+        headers={"authorization": f"Bearer {tokens[OWNER[0]]}"},
+    )
+    spaces = api.post("/spaces", json={"limit": 100}).json()["data"]["items"]
+    if any(space["slug"] == "other" for space in spaces):
+        return
+    space = api.post("/spaces/create", json={"name": "Other", "slug": "other"})
+    space.raise_for_status()
+    member = httpx.post(
+        f"{DOCMOST_URL}/api/users/me",
+        json={},
+        headers={"authorization": f"Bearer {tokens[MEMBER[0]]}"},
+        timeout=30,
+    ).json()["data"]["user"]
+    api.post(
+        "/spaces/members/add",
+        json={
+            "spaceId": space.json()["data"]["id"],
+            "role": "writer",
+            "userIds": [member["id"]],
+            "groupIds": [],
+        },
+    ).raise_for_status()
+
+
 @pytest.fixture(scope="session")
 def tokens() -> dict[str, str]:
-    return _bootstrap()
+    tokens = _bootstrap()
+    _other_space(tokens)
+    return tokens
 
 
 @pytest.fixture

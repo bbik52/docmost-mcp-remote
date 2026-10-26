@@ -27,6 +27,7 @@ from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.tools.common import as_member, page_link
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
+from docmost_mcp_remote.tools.untrusted import NOTICE, wrap
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,68 @@ def register(
         return await as_member(members, action)
 
     @mcp.tool(
+        name="move_page_to_space",
+        description=(
+            "Move a page with its child pages to the top level of another space. Everyone in "
+            "the target space gains access to them and members of the old space may lose it. "
+            "Child pages you cannot access stay behind as top-level pages of the old space."
+        ),
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def move_page_to_space(
+        page: PageRef,
+        space_id: Annotated[str, Field(description="Target space id from list_spaces.")],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await load_page(backend, page)
+            if found.space_id == space_id:
+                raise ToolError("The page is already in this space; use move_page instead.")
+            await policy.check(backend, space_id)
+            await backend.move_page_to_space(found.id, space_id)
+            moved = await backend.get_page(found.id)
+            if moved.space_id != space_id:
+                raise ToolError("Docmost did not move the page.")
+            logger.info("Moved page %s to space %s", found.id, space_id)
+            return result(moved, previous_space_id=found.space_id, space_id=space_id)
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="duplicate_page",
+        description=(
+            "Copy a page with its child pages, attachments and labels. Without target_space_id "
+            "the copy lands next to the original and is titled 'Copy of ...'; with it, the "
+            "copy goes to the top level of that space under the same title. Comments and "
+            "history are not copied."
+        ),
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def duplicate_page(
+        page: PageRef,
+        target_space_id: Annotated[
+            str | None, Field(description="Copy into this space instead of the same one.")
+        ] = None,
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            found = await load_page(backend, page)
+            target = target_space_id if target_space_id != found.space_id else None
+            if target is not None:
+                await policy.check(backend, target)
+            copied = await backend.duplicate_page(found.id, space_id=target)
+            created = await backend.get_page(copied.id)
+            logger.info("Copied page %s to %s", found.id, created.id)
+            return result(
+                created,
+                source_page_id=found.id,
+                space_id=created.space_id,
+                copied_child_pages=len(copied.child_page_ids),
+            )
+
+        return await as_member(members, action)
+
+    @mcp.tool(
         name="add_comment",
         description=(
             "Add a comment to a page as plain text, or a reply to a comment with "
@@ -308,6 +371,33 @@ def register(
                 "id": comment.id,
                 "page_id": found.id,
                 "parent_comment_id": comment.parent_comment_id,
+            }
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="update_comment",
+        description=(
+            "Replace the text of one of your own comments with plain text. Docmost only lets "
+            "you edit comments you wrote. The previous text is returned."
+        ),
+        annotations=_OVERWRITE,
+        auth=require_scopes("write"),
+    )
+    async def update_comment(
+        comment_id: Annotated[str, Field(description="Comment id from list_comments.")],
+        text: Annotated[str, Field(min_length=1, max_length=10_000)],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            comment = await backend.get_comment(comment_id)
+            space_id = comment.space_id or (await backend.get_page(comment.page_id)).space_id
+            await policy.check(backend, space_id)
+            updated = await backend.update_comment(comment.id, text)
+            return {
+                "id": updated.id,
+                "page_id": comment.page_id,
+                "notice": NOTICE,
+                "previous_text": wrap(comment.text, source=f"comment {comment.id}"),
             }
 
         return await as_member(members, action)
