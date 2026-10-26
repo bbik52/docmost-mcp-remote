@@ -30,6 +30,8 @@ when upgrading lists it under "Upgrade notes".
   protocol: `trash_page`, `add_space_members`, `change_space_member_role`,
   `invite_people`, `change_workspace_role` and `deactivate_member`. Clients
   that cannot ask are not blocked.
+- `add_comment` can @-mention people, given by email, name or id; Docmost
+  notifies them.
 - Pages can also be given as the last part of their URL
   (`getting-started-a1B2c3D4e5`).
 

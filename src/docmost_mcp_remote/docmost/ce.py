@@ -53,7 +53,7 @@ from docmost_mcp_remote.docmost.models import (
     WorkspaceMember,
     WorkspaceRole,
 )
-from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc, with_mentions
 from docmost_mcp_remote.docmost.version import VersionCheck, check_version
 
 logger = logging.getLogger(__name__)
@@ -653,9 +653,15 @@ class CeDocmostSession:
         return Comment.from_api(data)
 
     async def create_comment(
-        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+        self,
+        page_id: str,
+        text: str,
+        *,
+        parent_comment_id: str | None = None,
+        mentions: list[dict[str, Any]] | None = None,
     ) -> Comment:
-        body: dict[str, Any] = {"pageId": page_id, "content": json.dumps(text_to_doc(text))}
+        document = with_mentions(text_to_doc(text), mentions or [])
+        body: dict[str, Any] = {"pageId": page_id, "content": json.dumps(document)}
         if parent_comment_id:
             body["parentCommentId"] = parent_comment_id
         data = await self._call("comments/create", body)

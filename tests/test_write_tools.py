@@ -711,6 +711,46 @@ def test_trash_asks_the_person(server: RunningServer, docmost: FakeDocmost) -> N
     assert docmost.requests("pages/delete") == [{"pageId": "p1"}]
 
 
+def test_add_comment_with_mentions(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
+    people = [
+        {"id": "u2", "name": "Boris", "email": "boris@example.com"},
+        {"id": "u3", "name": "Vera", "email": "vera@example.com"},
+        {"id": "u4", "name": "Vera", "email": "vera.k@example.com"},
+    ]
+
+    def members(request: httpx.Request) -> httpx.Response:
+        query = str(json.loads(request.content).get("query") or "").lower()
+        found = [p for p in people if query in p["email"] or query in p["name"].lower()]
+        return ok({"items": found, "meta": {"hasNextPage": False}})
+
+    docmost.recorder.routes["/api/workspace/members"] = members
+    data = server.call(
+        token,
+        "add_comment",
+        {"page": "p1", "text": "Please check", "mention": ["Boris", "vera@example.com", "u4"]},
+    )
+    assert data["mentioned"] == [
+        {"id": "u2", "name": "Boris"},
+        {"id": "u3", "name": "Vera"},
+        {"id": "u4", "name": "Vera"},
+    ]
+    sent = json.loads(docmost.requests("comments/create")[-1]["content"])
+    first = sent["content"][0]["content"]
+    assert [node["attrs"]["entityId"] for node in first if node["type"] == "mention"] == [
+        "u2",
+        "u3",
+        "u4",
+    ]
+    assert first[0]["attrs"]["creatorId"] == "docmost-user-1"
+    assert first[0]["attrs"]["label"] == "Boris"
+    assert first[-1] == {"type": "text", "text": "Please check"}
+
+    with pytest.raises(ToolError, match="Several people are named 'Vera'"):
+        server.call(token, "add_comment", {"page": "p1", "text": "x", "mention": ["Vera"]})
+    with pytest.raises(ToolError, match="No workspace member matches 'nobody'"):
+        server.call(token, "add_comment", {"page": "p1", "text": "x", "mention": ["nobody"]})
+
+
 def test_trash_and_restore(server: RunningServer, token: str, docmost: FakeDocmost) -> None:
     server.call(token, "trash_page", {"page": "p1"})
     assert docmost.requests("pages/delete") == [{"pageId": "p1"}]
