@@ -198,4 +198,5 @@ Done when:
 ## Out of scope for v1
 
 EE backend, Docmost SSO users, hosted multi-tenant service, permanent delete,
-attachments upload, Swarm/Traefik as a supported setup.
+Swarm/Traefik as a supported setup. (File uploads, first out of scope, came
+in 1.1.0 and 1.2.0.)
