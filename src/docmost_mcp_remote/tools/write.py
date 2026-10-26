@@ -24,9 +24,9 @@ from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
-from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary
+from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary, WorkspaceMember
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
-from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, mention_node
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import (
     apply_operation,
@@ -49,6 +49,9 @@ MAX_CONTENT_CHARS = 500_000
 MAX_JSON_CHARS = 2_000_000
 MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
+#: Pages of workspace members read to find someone by id.
+_MEMBER_PAGES = 10
+MAX_MENTIONS = 10
 #: Seconds after someone else saved a page during which it counts as being edited.
 #: Docmost saves an open editor about every ten seconds while people type.
 BUSY_SECONDS = 60
@@ -199,6 +202,28 @@ async def _all_children(
             return pages
         cursor = result.next_cursor
     raise ToolError("Too many pages at this level to place a page; move it in Docmost.")
+
+
+async def find_person(backend: DocmostBackend, ref: str) -> WorkspaceMember:
+    """One workspace member by email, exact name or user id."""
+    wanted = ref.strip().lower()
+    found = await backend.workspace_members(query=ref.strip(), limit=100)
+    for key in ("email", "name"):
+        matches = [item for item in found.items if (getattr(item, key) or "").lower() == wanted]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ToolError(f"Several people are named {ref!r}; give their email.")
+    cursor: str | None = None
+    for _ in range(_MEMBER_PAGES):
+        page = await backend.workspace_members(cursor=cursor, limit=100)
+        match = next((item for item in page.items if item.id == ref.strip()), None)
+        if match is not None:
+            return match
+        if not page.has_next_page or not page.next_cursor:
+            break
+        cursor = page.next_cursor
+    raise ToolError(f"No workspace member matches {ref!r}; give their email.")
 
 
 def new_position(siblings: list[PageSummary], *, after_page_id: str | None, first: bool) -> str:
@@ -623,7 +648,10 @@ def register(
         name="add_comment",
         description=(
             "Add a comment to a page as plain text, or a reply to a comment with "
-            "reply_to_comment_id. Comments are visible to everyone who can see the page."
+            "reply_to_comment_id. Comments are visible to everyone who can see the page. "
+            "People in mention (emails, names or user ids) are @-mentioned at the start of "
+            "the comment, and Docmost notifies them; mention someone only when they need to "
+            "act on it."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
@@ -634,17 +662,34 @@ def register(
         reply_to_comment_id: Annotated[
             str | None, Field(description="Id of the comment to reply to.")
         ] = None,
+        mention: Annotated[
+            list[str] | None,
+            Field(max_length=MAX_MENTIONS, description="People to @-mention: email, name or id."),
+        ] = None,
     ) -> dict[str, Any]:
+        member_id = current_member_id()
+
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
+            people = [await find_person(backend, ref) for ref in dict.fromkeys(mention or [])]
+            me = await members.docmost_user_id(member_id) if people else None
             comment = await backend.create_comment(
-                found.id, text, parent_comment_id=reply_to_comment_id
+                found.id,
+                text,
+                parent_comment_id=reply_to_comment_id,
+                mentions=[
+                    mention_node(person.id, person.name or person.email or person.id, me)
+                    for person in people
+                ],
             )
-            return {
+            result: dict[str, Any] = {
                 "id": comment.id,
                 "page_id": found.id,
                 "parent_comment_id": comment.parent_comment_id,
             }
+            if people:
+                result["mentioned"] = [{"id": person.id, "name": person.name} for person in people]
+            return result
 
         return await as_member(members, action)
 
