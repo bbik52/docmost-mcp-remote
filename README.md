@@ -80,7 +80,7 @@ versions these tools answer that Docmost needs an upgrade.
 | `list_pages` | read | Page tree of a space, one level at a time |
 | `get_page_tree` | read | Several levels of the page tree in one call, within depth and size limits |
 | `recent_pages` | read | Recently updated pages |
-| `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
+| `get_page` | read | One page as Markdown, or as ProseMirror JSON with all formatting, by id, slug id or Docmost URL |
 | `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
 | `get_section` | read | One section of a page, with a hash for `replace_section` |
 | `suggest` | read | Quick lookup of pages, people and groups by name |
@@ -108,7 +108,9 @@ versions these tools answer that Docmost needs an upgrade.
 | `update_comment` | write | Change the text of one of your own comments |
 | `add_labels` | write | Add labels to a page (Docmost 0.90+) |
 | `remove_label` | write | Remove a label from a page (Docmost 0.90+) |
+| `replace_page_json` | write | Replace a page body with ProseMirror JSON, checked against the editor schema first; `dry_run` shows a diff |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
+| `restore_page_version` | write | Put a page body back to a version from its history, formatting included |
 | `trash_page` | delete | Move a page to the Trash |
 | `restore_page` | delete | Restore a page from the Trash |
 | `create_space` | admin | Create a space |

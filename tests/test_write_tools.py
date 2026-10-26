@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from typing import Any
 
@@ -16,7 +16,7 @@ from docmost_mcp_remote.crypto import Cipher
 from docmost_mcp_remote.db.schema import snapshots
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.db.store import Store, now
-from docmost_mcp_remote.docmost.prosemirror import text_to_doc
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
 from docmost_mcp_remote.tools import write
 from tests.conftest import SECRET
 from tests.fakes import Handler, Recorder, docmost_routes, error, ok
@@ -40,6 +40,8 @@ class FakeDocmost:
             "c3": self.comment("c3", "p3", "docmost-user-1", "Other space"),
         }
         self.apply_body_updates = True
+        #: What Docmost makes of a JSON body before storing it.
+        self.store_json: Callable[[dict[str, Any]], dict[str, Any]] = lambda doc: doc
         self.recorder = Recorder(self.routes())
         self.add("p1", "Guide", "# Guide\n\nIntro", position="a0VVV")
         self.add("p2", "Second", "", position="a1VVV")
@@ -108,8 +110,9 @@ class FakeDocmost:
                 return error(404, "Page not found")
             space = next(space for space in SPACES if space["id"] == page["spaceId"])
             if data.get("format") == "json":
-                return ok({**page, "space": space, "content": text_to_doc(page["content"])})
-            return ok({**page, "space": space})
+                document = page.get("document") or text_to_doc(page["content"])
+                return ok({**page, "space": space, "content": document})
+            return ok({k: v for k, v in page.items() if k != "document"} | {"space": space})
 
         def history(request: httpx.Request) -> httpx.Response:
             page_id = body(request)["pageId"]
@@ -143,7 +146,11 @@ class FakeDocmost:
                 return error(404, "Page not found")
             if "title" in data:
                 page["title"] = data["title"]
-            if "content" in data and self.apply_body_updates:
+            if "content" in data and self.apply_body_updates and data.get("format") == "json":
+                page["document"] = self.store_json(data["content"])
+                page["content"] = doc_to_markdown(page["document"])
+            elif "content" in data and self.apply_body_updates:
+                page.pop("document", None)
                 text, operation = data["content"], data["operation"]
                 if operation == "append":
                     page["content"] = f"{page['content']}\n\n{text}".strip()

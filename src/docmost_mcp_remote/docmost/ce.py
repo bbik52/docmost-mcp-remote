@@ -372,6 +372,17 @@ class CeDocmostSession:
         data = await self._call("pages/breadcrumbs", {"pageId": page_id})
         return [PageSummary.model_validate(item) for item in _items(data)]
 
+    async def get_page_json(self, page_id: str) -> dict[str, Any]:
+        data = await self._call("pages/info", {"pageId": page_id, "format": "json"})
+        content = data.get("content") if isinstance(data, dict) else None
+        return content if isinstance(content, dict) else {"type": "doc", "content": []}
+
+    async def replace_page_json(self, page_id: str, document: dict[str, Any]) -> None:
+        await self._call(
+            "pages/update",
+            {"pageId": page_id, "content": document, "operation": "replace", "format": "json"},
+        )
+
     async def get_page_document(self, page_id: str) -> str:
         data = await self._call("pages/info", {"pageId": page_id, "format": "json"})
         content = data.get("content") if isinstance(data, dict) else None

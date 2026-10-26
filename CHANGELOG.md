@@ -44,6 +44,22 @@ when upgrading lists it under "Upgrade notes".
   `change_space_member_role`. Docmost still checks the member's own rights.
   With `ALLOWED_SPACES` set, only spaces in that list can be created or
   renamed to. Removing members and deleting spaces are not offered.
+- `get_page` takes `format="json"` to return the body as Docmost's
+  ProseMirror JSON, with colors, merged cells, columns, diagrams and
+  mentions that Markdown loses.
+- `replace_page_json`: replace a page body with a ProseMirror document. It is
+  checked against Docmost's editor schema before it is sent, because Docmost
+  silently drops what it cannot read; if what Docmost stored differs from
+  what was sent, the previous body is put back. Snapshots taken before such
+  a write hold JSON, so `restore_snapshot` brings the formatting back too.
+- `get_page` and `get_page_outline` list in `markdown_loses` the formatting of
+  a page that Markdown cannot hold (found by a Markdown round trip on Docmost
+  0.97: colors, highlights, underline, alignment, merged or colored cells,
+  columns, tabs, mentions, embeds, diagrams, files). `update_page` replace and
+  `replace_section` refuse to remove it unless `drop_formatting` is set, and
+  point to `replace_page_json` instead.
+- `restore_page_version`: put a page body back to a version from
+  `list_page_history`, exactly as Docmost saved it.
 - Tools that need a newer Docmost than the connected one say so instead of
   failing with a Docmost error.
 

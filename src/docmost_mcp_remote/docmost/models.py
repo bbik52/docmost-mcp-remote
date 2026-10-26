@@ -211,14 +211,19 @@ class HistoryVersion(HistoryEntry):
 
     space_id: str | None = Field(default=None, alias="spaceId")
     content: str = ""
+    #: The version as Docmost stores it, for a restore without conversion.
+    document: dict[str, Any] | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> HistoryVersion:
         from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
 
         content = data.get("content")
-        markdown = doc_to_markdown(content) if isinstance(content, dict) else ""
-        return cls.model_validate({**data, "content": markdown})
+        if not isinstance(content, dict):
+            return cls.model_validate({**data, "content": ""})
+        return cls.model_validate(
+            {**data, "content": doc_to_markdown(content), "document": content}
+        )
 
 
 class Paginated[T](_Model):

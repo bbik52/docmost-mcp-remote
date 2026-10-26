@@ -8,7 +8,7 @@ two protocols.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from docmost_mcp_remote.docmost.models import (
     BacklinkDirection,
@@ -61,6 +61,10 @@ class DocmostBackend(Protocol):
     async def get_page(self, page_id: str) -> Page: ...
 
     async def breadcrumbs(self, page_id: str) -> list[PageSummary]: ...
+
+    async def get_page_json(self, page_id: str) -> dict[str, Any]: ...
+
+    async def replace_page_json(self, page_id: str, document: dict[str, Any]) -> None: ...
 
     async def get_page_document(self, page_id: str) -> str:
         """The page body converted by this server from ProseMirror JSON to Markdown."""

@@ -65,6 +65,18 @@ async def require_version(backend: DocmostBackend, minimum: Version) -> None:
         )
 
 
+def formatting_hint(losses: list[str]) -> str | None:
+    """Advice for a page whose formatting Markdown cannot hold; None when it can."""
+    if not losses:
+        return None
+    return (
+        f"This page has {', '.join(losses)}, which Markdown cannot hold. Appending and "
+        "prepending keep them, but replacing the body or a section with Markdown removes "
+        "them from the whole page. To change existing text here, read the page with "
+        "get_page format='json' and write it with replace_page_json."
+    )
+
+
 def page_link(docmost_base: str, page: Page) -> str | None:
     """The page's address in the Docmost web app."""
     if page.space is None or not page.space.slug:
