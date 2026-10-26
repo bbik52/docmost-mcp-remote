@@ -4,7 +4,7 @@
 
 services:
   server:
-    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.0.0 to pin one.
+    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.1.0 to pin one.
     image: ghcr.io/bbik52/docmost-mcp-remote:${IMAGE_TAG:-1}
     restart: unless-stopped
     environment:

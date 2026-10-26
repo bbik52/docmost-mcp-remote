@@ -32,7 +32,7 @@ member's own Docmost account and rights.
   before every change.
 - **Self-hosted.** One container plus Postgres, with a ready `compose.yaml`.
 
-[Quick start](#quick-start) · [Connecting a client](#connecting-a-client) · [Tools](#tools) · [Security model](#security-model) · [Configuration](#configuration) · [Upgrading](#upgrading)
+[Quick start](#quick-start) · [Connecting a client](#connecting-a-client) · [Tools](#tools) · [Resources and prompts](#resources-and-prompts) · [Security model](#security-model) · [Configuration](#configuration) · [Upgrading](#upgrading)
 
 ## How it works
 
@@ -50,7 +50,7 @@ every connected app and token on their account page.
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/consent.png" alt="The consent page: allow Claude to use Docmost as you, with read, write and delete scopes"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/consent.png" alt="The consent page: allow Claude to use Docmost as you, with read, write, delete and admin scopes"></td>
 <td width="50%"><img src="https://raw.githubusercontent.com/bbik52/docmost-mcp-remote/master/docs/images/account.png" alt="The account page with connected apps, personal tokens and the form to create a token"></td>
 </tr>
 <tr>
@@ -67,8 +67,8 @@ sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
 password. Labels and backlinks need Docmost 0.90 or newer, and the
-`title_only` and `labels` search filters need 0.96 or newer; on older
-versions these tools answer that Docmost needs an upgrade.
+`title_only` and `labels` search filters and `list_attachments` need 0.96 or
+newer; on older versions these tools answer that Docmost needs an upgrade.
 
 ## Tools
 
@@ -178,7 +178,16 @@ the same account page.
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write`, `delete` and `admin` only to clients you trust.
-Tool calls are limited per member and recorded in an audit log. See the
+Tool calls and resource reads are limited per member and recorded in an
+audit log.
+
+Exports of several pages and file downloads are handed out as links to this
+server that are valid for ten minutes. A link carries, encrypted, who asked
+and what to download, so anyone holding it can download the file until it
+expires; the server streams the file from Docmost with that member's session
+and stores nothing. Links are kept out of the access log.
+
+See the
 [threat model](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/security-model.md), [SECURITY.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/SECURITY.md) for
 how to report a vulnerability and the [design](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/DESIGN.md).
 
@@ -228,7 +237,7 @@ makes the snapshots unreadable.
 
 services:
   server:
-    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.0.0 to pin one.
+    # "1" follows 1.x releases; set IMAGE_TAG to a full version such as 1.1.0 to pin one.
     image: ghcr.io/bbik52/docmost-mcp-remote:${IMAGE_TAG:-1}
     restart: unless-stopped
     environment:
@@ -400,7 +409,7 @@ docker compose exec server docmost-mcp-remote admin audit --email anna@example.c
 
 `revoke-member` revokes every grant of the member and drops their stored
 Docmost session; `disable-member` blocks them until `enable-member`. Every
-tool call is recorded in the audit log with the tool, the page or space id
+tool call and resource read is recorded in the audit log with the tool, the page or space id
 and the outcome, never with content or arguments.
 
 To rotate `SECRET_KEY`: set the old value as `SECRET_KEY_PREVIOUS` and a new
@@ -436,7 +445,7 @@ restore the backup with the old image:
 ```sh
 docker compose stop server
 docker compose exec -T postgres pg_restore -U docmost_mcp -d docmost_mcp --clean --if-exists < docmost-mcp-2026-01-31.dump
-IMAGE_TAG=1.0.0 docker compose up -d
+IMAGE_TAG=1.1.0 docker compose up -d
 ```
 
 ## Configuration
@@ -455,6 +464,7 @@ IMAGE_TAG=1.0.0 docker compose up -d
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |
 | `TOOL_CALLS_PER_MINUTE` | no | `60` | Tool calls and resource reads one member may make per minute, over all their clients |
+| `WEB_SESSION_HOURS` | no | `12` | Hours a sign-in to the account page lasts |
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
