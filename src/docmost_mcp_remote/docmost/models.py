@@ -135,6 +135,32 @@ class Comment(_Model):
         return cls.model_validate({**data, "text": text})
 
 
+class HistoryEntry(_Model):
+    """One saved version of a page in Docmost's page history."""
+
+    id: str
+    page_id: str = Field(alias="pageId")
+    title: str | None = None
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+    last_updated_by: UserRef | None = Field(default=None, alias="lastUpdatedBy")
+    contributors: list[UserRef] = Field(default_factory=list)
+
+
+class HistoryVersion(HistoryEntry):
+    """A history entry with its body, converted from ProseMirror JSON to Markdown."""
+
+    space_id: str | None = Field(default=None, alias="spaceId")
+    content: str = ""
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> HistoryVersion:
+        from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown
+
+        content = data.get("content")
+        markdown = doc_to_markdown(content) if isinstance(content, dict) else ""
+        return cls.model_validate({**data, "content": markdown})
+
+
 class Paginated[T](_Model):
     items: list[T]
     next_cursor: str | None = None

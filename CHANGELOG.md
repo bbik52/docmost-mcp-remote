@@ -21,6 +21,11 @@ when upgrading lists it under "Upgrade notes".
   warns when Docmost's Markdown conversion also changed text elsewhere.
 - `update_page` and `replace_section` take `dry_run` to show the change as a
   diff without writing it.
+- `list_page_history`, `get_page_version` and `diff_page`: the versions
+  Docmost saves of a page, read as Markdown, and a diff between the current
+  body, a version and a snapshot. Versions are stored by Docmost as
+  ProseMirror JSON; the server converts them to Markdown laid out like
+  Docmost's own.
 
 ### Changed
 

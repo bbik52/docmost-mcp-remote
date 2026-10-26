@@ -28,13 +28,15 @@ from docmost_mcp_remote.docmost.models import (
     Comment,
     CopiedPage,
     CurrentUser,
+    HistoryEntry,
+    HistoryVersion,
     Page,
     PageSummary,
     Paginated,
     SearchHit,
     Space,
 )
-from docmost_mcp_remote.docmost.prosemirror import text_to_doc
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
 from docmost_mcp_remote.docmost.version import VersionCheck, check_version
 
 logger = logging.getLogger(__name__)
@@ -266,6 +268,23 @@ class CeDocmostSession:
     async def breadcrumbs(self, page_id: str) -> list[PageSummary]:
         data = await self._call("pages/breadcrumbs", {"pageId": page_id})
         return [PageSummary.model_validate(item) for item in _items(data)]
+
+    async def get_page_document(self, page_id: str) -> str:
+        data = await self._call("pages/info", {"pageId": page_id, "format": "json"})
+        content = data.get("content") if isinstance(data, dict) else None
+        return doc_to_markdown(content) if isinstance(content, dict) else ""
+
+    async def page_history(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 20
+    ) -> Paginated[HistoryEntry]:
+        data = await self._call(
+            "pages/history", {"pageId": page_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [HistoryEntry.model_validate(item) for item in _items(data)])
+
+    async def history_version(self, history_id: str) -> HistoryVersion:
+        data = await self._call("pages/history/info", {"historyId": history_id})
+        return HistoryVersion.from_api(data)
 
     async def search(
         self, query: str, *, space_id: str | None = None, limit: int = 20

@@ -12,6 +12,7 @@ from docmost_mcp_remote.docmost import (
     DocmostNotFoundError,
 )
 from docmost_mcp_remote.docmost.ce import CeDocmostSession
+from docmost_mcp_remote.docmost.version import Version
 from tests.integration.conftest import OWNER
 
 pytestmark = pytest.mark.integration
@@ -153,3 +154,67 @@ async def test_member_cannot_see_private_space(
 
 def _token(session: CeDocmostSession) -> str:
     return session._token
+
+
+SAMPLE = """# Title
+
+Text with **bold**, _italic_, ~~strike~~, `code` and [a link](https://example.com).
+
+- one
+- two
+  - nested
+
+1. first
+2. second
+
+- [ ] todo
+- [x] done
+
+> quoted
+
+```python
+print("hi")
+```
+
+---
+
+| Name | Value |
+| --- | --- |
+| a   | 1   |
+"""
+
+
+async def test_converted_markdown_matches_docmost(
+    owner: CeDocmostSession, space_id: str, unique: str
+) -> None:
+    page = await owner.create_page(space_id, f"Convert {unique}", markdown=SAMPLE)
+    docmost = (await owner.get_page(page.id)).content
+    ours = await owner.get_page_document(page.id)
+    version = (await owner.version()).version
+    if version is None or version >= Version(0, 97, 0):
+        assert ours.strip() == docmost.strip()
+    else:
+        # Older Docmost lays out lists and tables differently; the text matches.
+        assert _loose(ours) == _loose(docmost)
+
+
+def _loose(markdown: str) -> list[str]:
+    lines = (" ".join(line.split()) for line in markdown.splitlines())
+    return [line for line in lines if line and not line.startswith("|")]
+
+
+async def test_page_history(owner: CeDocmostSession, space_id: str, unique: str) -> None:
+    page = await owner.create_page(space_id, f"History {unique}", markdown="First version")
+    await owner.update_page_body(page.id, f"Second {unique}", "append")
+    await _body_contains(owner, page.id, f"Second {unique}")
+    # Docmost saves a version about a minute after the last edit of a new page.
+    versions = []
+    for _ in range(90):
+        versions = (await owner.page_history(page.id)).items
+        if versions:
+            break
+        await asyncio.sleep(2)
+    assert versions, "Docmost saved no page version"
+    version = await owner.history_version(versions[0].id)
+    assert version.page_id == page.id
+    assert f"Second {unique}" in version.content

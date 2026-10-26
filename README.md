@@ -84,6 +84,9 @@ password.
 | `list_comments` | read | Comments and replies on a page |
 | `list_trash` | read | Pages in the Trash of a space |
 | `list_snapshots` | read | Snapshots this server saved before your changes to a page |
+| `list_page_history` | read | Versions of a page saved by Docmost, with who changed it |
+| `get_page_version` | read | One saved version of a page as Markdown |
+| `diff_page` | read | Unified diff between the current body, a saved version or a snapshot |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
 | `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
 | `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
