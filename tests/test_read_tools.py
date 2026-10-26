@@ -124,6 +124,7 @@ def test_tool_list(server: RunningServer) -> None:
         "find_pages_by_label",
         "get_page",
         "get_page_outline",
+        "get_page_tree",
         "get_page_version",
         "get_section",
         "get_space",
@@ -140,6 +141,7 @@ def test_tool_list(server: RunningServer) -> None:
         "list_workspace_members",
         "recent_pages",
         "search",
+        "suggest",
         "whoami",
     ]
 

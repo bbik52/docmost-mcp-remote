@@ -136,6 +136,26 @@ class LinkedPage(_PageBase):
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
 
 
+class SuggestedUser(_Model):
+    id: str
+    name: str | None = None
+    email: str | None = None
+
+
+class SuggestedGroup(_Model):
+    id: str
+    name: str
+    description: str | None = None
+
+
+class Suggestions(_Model):
+    """Answer of ``search/suggest``: matches by name, for mentions and quick lookups."""
+
+    users: list[SuggestedUser] = Field(default_factory=list)
+    groups: list[SuggestedGroup] = Field(default_factory=list)
+    pages: list[LinkedPage] = Field(default_factory=list)
+
+
 class Label(_Model):
     id: str
     name: str

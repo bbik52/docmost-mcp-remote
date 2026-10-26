@@ -32,6 +32,10 @@ when upgrading lists it under "Upgrade notes".
   `created_by_me`.
 - Links to pages of the same Docmost in Markdown written by the server are
   stored as internal links, so Docmost counts them as backlinks.
+- `suggest`: quick lookup of pages, people and groups by name, as Docmost's
+  search box does.
+- `get_page_tree`: several levels of a page tree in one call, limited by
+  depth and page count; branches not read are listed to continue from.
 - `list_space_members`, `list_workspace_members` and `list_groups`.
 - A new `admin` scope, never granted unless ticked, for `create_space`,
   `update_space`, `add_space_members` (users by email, groups by name) and

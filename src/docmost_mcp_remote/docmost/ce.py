@@ -42,6 +42,7 @@ from docmost_mcp_remote.docmost.models import (
     Space,
     SpaceMember,
     SpaceRole,
+    Suggestions,
     WorkspaceMember,
 )
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
@@ -308,6 +309,28 @@ class CeDocmostSession:
             body["query"] = query
         data = await self._call("workspace/members", body)
         return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+
+    async def suggest(
+        self,
+        query: str,
+        *,
+        pages: bool = True,
+        users: bool = False,
+        groups: bool = False,
+        space_id: str | None = None,
+        limit: int = 10,
+    ) -> Suggestions:
+        body: dict[str, Any] = {
+            "query": query,
+            "includePages": pages,
+            "includeUsers": users,
+            "includeGroups": groups,
+            "limit": _limit(limit),
+        }
+        if space_id:
+            body["spaceId"] = space_id
+        data = await self._call("search/suggest", body)
+        return Suggestions.model_validate(data or {})
 
     async def groups(
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50

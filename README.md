@@ -78,10 +78,12 @@ versions these tools answer that Docmost needs an upgrade.
 | `list_spaces` | read | Spaces you can access, with your role |
 | `get_space` | read | One space: description, visibility, member count, your role |
 | `list_pages` | read | Page tree of a space, one level at a time |
+| `get_page_tree` | read | Several levels of the page tree in one call, within depth and size limits |
 | `recent_pages` | read | Recently updated pages |
 | `get_page` | read | One page as Markdown, by id, slug id or Docmost URL |
 | `get_page_outline` | read | The headings of a page, to find a section without reading the whole body |
 | `get_section` | read | One section of a page, with a hash for `replace_section` |
+| `suggest` | read | Quick lookup of pages, people and groups by name |
 | `search` | read | Full-text search with snippets; filters by title only, labels or your own pages |
 | `list_comments` | read | Comments and replies on a page |
 | `list_trash` | read | Pages in the Trash of a space |
