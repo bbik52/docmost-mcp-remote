@@ -70,13 +70,13 @@ def test_sign_in_and_tokens(web: TestClient) -> None:
 
     created = web.post(
         "/account/tokens",
-        data={"csrf": csrf, "name": "laptop", "scope": ["write", "admin"]},
+        data={"csrf": csrf, "name": "laptop", "scope": ["write", "superuser"]},
     )
     assert created.status_code == 200
     token = re.search(r"dmr_[A-Za-z0-9_-]+", created.text)
     assert token
     assert "read, write" in created.text
-    assert "admin" not in created.text
+    assert "superuser" not in created.text
 
     # Shown once: a reload shows only the hint.
     again = web.get("/account")

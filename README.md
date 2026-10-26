@@ -27,7 +27,7 @@ member's own Docmost account and rights.
 - **Authorization is mandatory.** OAuth 2.1 for remote connectors and personal
   bearer tokens for scripts. There is no unauthenticated mode.
 - **Safe by default.** `read` is the only scope granted without asking.
-  Writing and moving to Trash need explicit scopes. Nothing is deleted
+  Writing, moving to Trash and managing spaces need explicit scopes. Nothing is deleted
   permanently, and the server keeps an encrypted snapshot of a page body
   before every change.
 - **Self-hosted.** One container plus Postgres, with a ready `compose.yaml`.
@@ -88,6 +88,9 @@ versions these tools answer that Docmost needs an upgrade.
 | `list_snapshots` | read | Snapshots this server saved before your changes to a page |
 | `list_page_history` | read | Versions of a page saved by Docmost, with who changed it |
 | `get_page_version` | read | One saved version of a page as Markdown |
+| `list_space_members` | read | Users and groups with a role in a space |
+| `list_workspace_members` | read | People in the workspace, with their role |
+| `list_groups` | read | Groups of the workspace |
 | `diff_page` | read | Unified diff between the current body, a saved version or a snapshot |
 | `list_backlinks` | read | Pages that link to a page, or that a page links to (Docmost 0.90+) |
 | `list_labels` | read | Labels of the workspace or of one page (Docmost 0.90+) |
@@ -106,6 +109,10 @@ versions these tools answer that Docmost needs an upgrade.
 | `restore_snapshot` | write | Put a page body back to a snapshot |
 | `trash_page` | delete | Move a page to the Trash |
 | `restore_page` | delete | Restore a page from the Trash |
+| `create_space` | admin | Create a space |
+| `update_space` | admin | Change a space's name, slug or description |
+| `add_space_members` | admin | Give users (by email) and groups (by name) a role in a space |
+| `change_space_member_role` | admin | Change the role of a user or group in a space |
 
 Page bodies, comments and snippets are returned inside a
 `<docmost-untrusted-content>` envelope so the model treats them as data.
@@ -137,7 +144,7 @@ the same account page.
 
 Page content is treated as untrusted data and labelled as such for the model.
 Prompt injection in a page can still make a client act within the scopes the
-member granted, so grant `write` and `delete` only to clients you trust.
+member granted, so grant `write`, `delete` and `admin` only to clients you trust.
 Tool calls are limited per member and recorded in an audit log. See the
 [threat model](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/security-model.md), [SECURITY.md](https://github.com/bbik52/docmost-mcp-remote/blob/master/SECURITY.md) for
 how to report a vulnerability and the [design](https://github.com/bbik52/docmost-mcp-remote/blob/master/docs/DESIGN.md).
@@ -294,8 +301,8 @@ proxy's address.
 The MCP endpoint is `PUBLIC_URL/mcp`, for example
 `https://mcp.example.com/mcp`. Clients that support MCP authorization open a
 browser window: sign in with your Docmost email and password and choose what
-the client may do. `read` is always granted; tick `write` or `delete` only
-for clients you trust.
+the client may do. `read` is always granted; tick `write`, `delete` or
+`admin` only for clients you trust.
 
 **Claude.ai and Claude Desktop**: Settings, Connectors, Add custom connector,
 then enter the endpoint URL. The server must be reachable from the internet

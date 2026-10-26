@@ -16,6 +16,7 @@ from docmost_mcp_remote.docmost.models import (
     Comment,
     CopiedPage,
     CurrentUser,
+    Group,
     HistoryEntry,
     HistoryVersion,
     Label,
@@ -25,6 +26,9 @@ from docmost_mcp_remote.docmost.models import (
     Paginated,
     SearchHit,
     Space,
+    SpaceMember,
+    SpaceRole,
+    WorkspaceMember,
 )
 from docmost_mcp_remote.docmost.version import VersionCheck
 
@@ -86,6 +90,44 @@ class DocmostBackend(Protocol):
         cursor: str | None = None,
         limit: int = 50,
     ) -> Paginated[LinkedPage]: ...
+
+    async def create_space(
+        self, name: str, slug: str, *, description: str | None = None
+    ) -> Space: ...
+
+    async def update_space(
+        self,
+        space_id: str,
+        *,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+    ) -> Space: ...
+
+    async def space_members(
+        self, space_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[SpaceMember]: ...
+
+    async def add_space_members(
+        self, space_id: str, role: SpaceRole, *, user_ids: list[str], group_ids: list[str]
+    ) -> None: ...
+
+    async def change_space_member_role(
+        self,
+        space_id: str,
+        role: SpaceRole,
+        *,
+        user_id: str | None = None,
+        group_id: str | None = None,
+    ) -> None: ...
+
+    async def workspace_members(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]: ...
+
+    async def groups(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Group]: ...
 
     async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]: ...
 

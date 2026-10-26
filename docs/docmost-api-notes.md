@@ -126,6 +126,17 @@ CI run. Nothing here is copied from Docmost or from other clients.
 
 - `spaces/info` with `spaceId` returns the space with `memberCount` and the
   member's `membership.role`.
+- `spaces/create` (`name`, `slug`, optional `description`; slug letters and
+  digits) needs a workspace admin or owner; the creator becomes the space's
+  admin. `spaces/update` takes `spaceId` and the same fields and needs the
+  space admin role. Both return the space without `membership`.
+- `spaces/members` lists users and groups (`type: "user" | "group"`) with
+  their role. `spaces/members/add` takes `role` and up to 25 `userIds` and
+  `groupIds`; people who already have a role are left as they are, without
+  an error. `spaces/members/change-role` takes `role` and `userId` or
+  `groupId`.
+- `workspace/members` and `groups` are paginated and take `query` to filter
+  by name or email.
 
 ## Trash
 

@@ -40,7 +40,7 @@ from docmost_mcp_remote.ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ("read", "write", "delete")
+SCOPES = ("read", "write", "delete", "admin")
 ACCESS_TOKEN_TTL = timedelta(hours=1)
 REFRESH_TOKEN_TTL = timedelta(days=30)
 CODE_TTL = timedelta(minutes=5)

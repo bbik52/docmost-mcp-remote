@@ -60,6 +60,34 @@ class Space(_Model):
         return cls.model_validate({**data, "member_role": membership.get("role")})
 
 
+class SpaceMember(_Model):
+    """A user or a group with a role in a space."""
+
+    id: str
+    type: Literal["user", "group"]
+    name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    member_count: int | None = Field(default=None, alias="memberCount")
+
+
+class WorkspaceMember(_Model):
+    id: str
+    name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    last_login_at: datetime | None = Field(default=None, alias="lastLoginAt")
+    deactivated_at: datetime | None = Field(default=None, alias="deactivatedAt")
+
+
+class Group(_Model):
+    id: str
+    name: str
+    description: str | None = None
+    member_count: int | None = Field(default=None, alias="memberCount")
+    is_default: bool | None = Field(default=None, alias="isDefault")
+
+
 class PageSummary(_PageBase):
     """A page in a list: tree, recent pages or Trash."""
 
@@ -181,3 +209,4 @@ class Paginated[T](_Model):
 
 BodyOperation = Literal["append", "prepend", "replace"]
 BacklinkDirection = Literal["incoming", "outgoing"]
+SpaceRole = Literal["admin", "writer", "reader"]

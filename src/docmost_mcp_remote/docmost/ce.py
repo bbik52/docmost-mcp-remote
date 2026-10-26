@@ -30,6 +30,7 @@ from docmost_mcp_remote.docmost.models import (
     Comment,
     CopiedPage,
     CurrentUser,
+    Group,
     HistoryEntry,
     HistoryVersion,
     Label,
@@ -39,6 +40,9 @@ from docmost_mcp_remote.docmost.models import (
     Paginated,
     SearchHit,
     Space,
+    SpaceMember,
+    SpaceRole,
+    WorkspaceMember,
 )
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, text_to_doc
 from docmost_mcp_remote.docmost.version import VersionCheck, check_version
@@ -242,6 +246,77 @@ class CeDocmostSession:
     async def get_space(self, space_id: str) -> Space:
         data = await self._call("spaces/info", {"spaceId": space_id})
         return Space.from_api(data)
+
+    async def create_space(self, name: str, slug: str, *, description: str | None = None) -> Space:
+        body: dict[str, Any] = {"name": name, "slug": slug}
+        if description is not None:
+            body["description"] = description
+        data = await self._call("spaces/create", body)
+        return Space.from_api(data)
+
+    async def update_space(
+        self,
+        space_id: str,
+        *,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+    ) -> Space:
+        body: dict[str, Any] = {"spaceId": space_id}
+        for key, value in (("name", name), ("slug", slug), ("description", description)):
+            if value is not None:
+                body[key] = value
+        data = await self._call("spaces/update", body)
+        return Space.from_api(data)
+
+    async def space_members(
+        self, space_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[SpaceMember]:
+        data = await self._call(
+            "spaces/members", {"spaceId": space_id, "limit": _limit(limit), "cursor": cursor}
+        )
+        return _paginated(data, [SpaceMember.model_validate(item) for item in _items(data)])
+
+    async def add_space_members(
+        self, space_id: str, role: SpaceRole, *, user_ids: list[str], group_ids: list[str]
+    ) -> None:
+        await self._call(
+            "spaces/members/add",
+            {"spaceId": space_id, "role": role, "userIds": user_ids, "groupIds": group_ids},
+        )
+
+    async def change_space_member_role(
+        self,
+        space_id: str,
+        role: SpaceRole,
+        *,
+        user_id: str | None = None,
+        group_id: str | None = None,
+    ) -> None:
+        body: dict[str, Any] = {"spaceId": space_id, "role": role}
+        if user_id:
+            body["userId"] = user_id
+        if group_id:
+            body["groupId"] = group_id
+        await self._call("spaces/members/change-role", body)
+
+    async def workspace_members(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[WorkspaceMember]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if query:
+            body["query"] = query
+        data = await self._call("workspace/members", body)
+        return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+
+    async def groups(
+        self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Group]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if query:
+            body["query"] = query
+        data = await self._call("groups", body)
+        return _paginated(data, [Group.model_validate(item) for item in _items(data)])
 
     async def list_pages(
         self,

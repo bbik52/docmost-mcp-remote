@@ -29,7 +29,7 @@ from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostEr
 from docmost_mcp_remote.guard import ToolGuard
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.oauth import DocmostOAuthProvider
-from docmost_mcp_remote.tools import account, history, labels, read, write
+from docmost_mcp_remote.tools import account, history, labels, manage, read, write
 from docmost_mcp_remote.web.routes import WebPages
 
 logger = logging.getLogger(__name__)
@@ -136,6 +136,7 @@ def create_server(
     write.register(mcp, settings, members, snapshots)
     history.register(mcp, settings, members, snapshots)
     labels.register(mcp, settings, members)
+    manage.register(mcp, settings, members)
     return mcp
 
 
