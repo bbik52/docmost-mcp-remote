@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-26
+
 ### Added
 
 - MCP resources: `docmost://spaces` and `docmost://pages/{page}`, a page as
