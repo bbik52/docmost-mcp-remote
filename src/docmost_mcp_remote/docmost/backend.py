@@ -28,6 +28,7 @@ from docmost_mcp_remote.docmost.models import (
     Space,
     SpaceMember,
     SpaceRole,
+    Suggestions,
     WorkspaceMember,
 )
 from docmost_mcp_remote.docmost.version import VersionCheck
@@ -128,6 +129,17 @@ class DocmostBackend(Protocol):
     async def groups(
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Group]: ...
+
+    async def suggest(
+        self,
+        query: str,
+        *,
+        pages: bool = True,
+        users: bool = False,
+        groups: bool = False,
+        space_id: str | None = None,
+        limit: int = 10,
+    ) -> Suggestions: ...
 
     async def labels(self, *, cursor: str | None = None, limit: int = 100) -> Paginated[Label]: ...
 

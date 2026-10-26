@@ -115,6 +115,18 @@ CI run. Nothing here is copied from Docmost or from other clients.
   `data-internal="true"` on `<a>`; the server rewrites links to pages of the
   same Docmost into such tags before sending a body.
 
+## Suggestions
+
+- `search/suggest` takes `query`, `includePages`, `includeUsers`,
+  `includeGroups`, `spaceId` and `limit` (default 10) and answers
+  `{users, groups, pages}`; pages carry their `space`. Available since 0.70.
+
+## Page tree
+
+- There is no endpoint for a whole tree; `pages/sidebar-pages` returns one
+  level with `hasChildren`, so `get_page_tree` walks it level by level, up
+  to eight requests at a time.
+
 ## Search filters
 
 - `search` accepts `creatorId` since 0.70, and `titleOnly` and `labelIds`
