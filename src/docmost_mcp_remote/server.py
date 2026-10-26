@@ -29,7 +29,17 @@ from docmost_mcp_remote.docmost import CeDocmostClient, DocmostClient, DocmostEr
 from docmost_mcp_remote.guard import ToolGuard
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.oauth import DocmostOAuthProvider
-from docmost_mcp_remote.tools import account, history, labels, manage, navigate, read, write
+from docmost_mcp_remote.tools import (
+    account,
+    files,
+    history,
+    labels,
+    manage,
+    navigate,
+    read,
+    write,
+)
+from docmost_mcp_remote.web.downloads import DownloadLinks
 from docmost_mcp_remote.web.routes import WebPages
 
 logger = logging.getLogger(__name__)
@@ -129,7 +139,8 @@ def create_server(
         return JSONResponse({"status": "ok", "version": __version__})
 
     pages = WebPages(settings, store, oauth, members)
-    for route in pages.routes():
+    links = DownloadLinks(settings, members, cipher)
+    for route in [*pages.routes(), *links.routes()]:
         mcp.custom_route(route.path, methods=sorted(route.methods or []), include_in_schema=False)(
             route.endpoint
         )
@@ -141,6 +152,7 @@ def create_server(
     labels.register(mcp, settings, members)
     manage.register(mcp, settings, members)
     navigate.register(mcp, settings, members)
+    files.register(mcp, settings, members, snapshots, links)
     return mcp
 
 

@@ -97,6 +97,10 @@ versions these tools answer that Docmost needs an upgrade.
 | `list_backlinks` | read | Pages that link to a page, or that a page links to (Docmost 0.90+) |
 | `list_labels` | read | Labels of the workspace or of one page (Docmost 0.90+) |
 | `find_pages_by_label` | read | Pages with a label in a space (Docmost 0.90+) |
+| `export_page` | read | A page as Markdown or HTML; with children or files, a download link to a zip |
+| `export_space` | read | A download link to a zip of a whole space (space admins) |
+| `list_attachments` | read | Files uploaded to a page (Docmost 0.96+) |
+| `get_attachment` | read | Details of a file with a download link; small text files inline |
 | `create_page` | write | New page with a Markdown body, optionally under a parent |
 | `update_page` | write | Append, prepend or replace a page body with Markdown; `dry_run` shows a diff |
 | `replace_section` | write | Replace one section of a page, refused if it changed since it was read |
@@ -108,6 +112,7 @@ versions these tools answer that Docmost needs an upgrade.
 | `update_comment` | write | Change the text of one of your own comments |
 | `add_labels` | write | Add labels to a page (Docmost 0.90+) |
 | `remove_label` | write | Remove a label from a page (Docmost 0.90+) |
+| `upload_attachment` | write | Upload a file (base64, up to 10 MB) and add it to the end of the page |
 | `replace_page_json` | write | Replace a page body with ProseMirror JSON, checked against the editor schema first; `dry_run` shows a diff |
 | `restore_snapshot` | write | Put a page body back to a snapshot |
 | `restore_page_version` | write | Put a page body back to a version from its history, formatting included |

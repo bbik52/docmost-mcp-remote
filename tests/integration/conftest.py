@@ -16,12 +16,27 @@ import pytest
 
 from docmost_mcp_remote.docmost import CeDocmostClient
 from docmost_mcp_remote.docmost.ce import CeDocmostSession
+from docmost_mcp_remote.docmost.version import Version, parse_version
+from tests.harness import RunningServer
 
 DOCMOST_URL = os.environ.get("DOCMOST_TEST_URL", "")
 OWNER = ("owner@example.com", "Owner-password-1")
 MEMBER = ("member@example.com", "Member-password-1")
 
 pytestmark = pytest.mark.integration
+
+
+def reported_version(server: RunningServer, token: str) -> Version | None:
+    """The Docmost version whoami reports; None when Docmost did not say.
+
+    Docmost asks GitHub for the latest release while answering, and answers
+    without a version when that request fails, as it can on shared CI runners.
+    """
+    reported = server.call(token, "whoami")["docmost_version"]
+    try:
+        return parse_version(reported) if reported else None
+    except ValueError:
+        return None
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

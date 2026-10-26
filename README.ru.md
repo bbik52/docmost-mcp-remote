@@ -93,6 +93,10 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `list_backlinks` | read | Страницы, которые ссылаются на страницу, или на которые ссылается она (Docmost 0.90+) |
 | `list_labels` | read | Метки рабочего пространства или одной страницы (Docmost 0.90+) |
 | `find_pages_by_label` | read | Страницы с меткой в пространстве (Docmost 0.90+) |
+| `export_page` | read | Страница в Markdown или HTML; с дочерними или файлами — ссылка на zip |
+| `export_space` | read | Ссылка на zip со всем пространством (для админов пространства) |
+| `list_attachments` | read | Файлы, загруженные на страницу (Docmost 0.96+) |
+| `get_attachment` | read | Сведения о файле и ссылка на скачивание; небольшие текстовые файлы сразу в ответе |
 | `create_page` | write | Новая страница с телом в Markdown, при необходимости внутри родительской |
 | `update_page` | write | Добавить в конец, в начало или заменить тело страницы на Markdown; `dry_run` показывает diff |
 | `replace_section` | write | Заменить один раздел страницы; отказ, если раздел изменился после чтения |
@@ -104,6 +108,7 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 | `update_comment` | write | Изменить текст своего комментария |
 | `add_labels` | write | Добавить метки странице (Docmost 0.90+) |
 | `remove_label` | write | Убрать метку со страницы (Docmost 0.90+) |
+| `upload_attachment` | write | Загрузить файл (base64, до 10 МБ) и добавить его в конец страницы |
 | `replace_page_json` | write | Заменить тело страницы на ProseMirror JSON, сначала проверив его по схеме редактора; `dry_run` показывает diff |
 | `restore_snapshot` | write | Вернуть тело страницы к снимку |
 | `restore_page_version` | write | Вернуть тело страницы к версии из истории вместе с оформлением |

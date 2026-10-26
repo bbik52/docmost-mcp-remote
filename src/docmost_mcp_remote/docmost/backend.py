@@ -10,12 +10,15 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from docmost_mcp_remote.docmost.downloads import Download
 from docmost_mcp_remote.docmost.models import (
+    Attachment,
     BacklinkDirection,
     BodyOperation,
     Comment,
     CopiedPage,
     CurrentUser,
+    ExportFormat,
     Group,
     HistoryEntry,
     HistoryVersion,
@@ -201,6 +204,35 @@ class DocmostBackend(Protocol):
     async def move_to_trash(self, page_id: str) -> None: ...
 
     async def restore_from_trash(self, page_id: str) -> None: ...
+
+    async def export_page(
+        self,
+        page_id: str,
+        format: ExportFormat,
+        *,
+        include_children: bool = False,
+        include_attachments: bool = False,
+    ) -> Download:
+        """One page as a Markdown or HTML file, or a zip with its children or files."""
+        ...
+
+    async def export_space(
+        self, space_id: str, format: ExportFormat, *, include_attachments: bool = False
+    ) -> Download:
+        """A whole space as a zip."""
+        ...
+
+    async def attachment_info(self, attachment_id: str) -> Attachment: ...
+
+    async def page_attachments(
+        self, page_id: str, *, cursor: str | None = None, limit: int = 50
+    ) -> Paginated[Attachment]: ...
+
+    async def download_attachment(self, attachment_id: str, file_name: str) -> Download: ...
+
+    async def upload_attachment(
+        self, page_id: str, file_name: str, content: bytes, mime_type: str
+    ) -> Attachment: ...
 
 
 class DocmostClient(Protocol):

@@ -60,6 +60,15 @@ when upgrading lists it under "Upgrade notes".
   point to `replace_page_json` instead.
 - `restore_page_version`: put a page body back to a version from
   `list_page_history`, exactly as Docmost saved it.
+- `export_page` and `export_space`: Docmost's own Markdown or HTML export. A
+  single page comes back in the result; a zip (a page with its children or
+  files, a whole space) as a download link to this server, valid for ten
+  minutes and bound to the member, which streams the file from Docmost and
+  stores nothing.
+- `list_attachments` (Docmost 0.96 or newer), `get_attachment` (with a
+  download link, and the text of small text files) and `upload_attachment`
+  (base64, up to 10 MB), which by default adds the file at the end of the
+  page as an image or a file block.
 - Tools that need a newer Docmost than the connected one say so instead of
   failing with a Docmost error.
 

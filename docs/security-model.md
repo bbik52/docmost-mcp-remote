@@ -58,6 +58,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Irreversible overwrite | Snapshot before every body write; the write is not done if the snapshot fails; `restore_snapshot` | `tools/write.py`, `tests/test_write_tools.py` |
 | Docmost accepting a write and dropping it | Read-back after every write; the call fails and names the snapshot | `tools/write.py` |
 | A runaway agent hammering Docmost | `TOOL_CALLS_PER_MINUTE` per member over all clients; page and list size limits | `guard.py`, `tests/test_guard.py` |
+| A download link reaching someone else | Links are encrypted and authenticated with the server key, name one member and one file, expire after ten minutes, and are served with `Content-Disposition: attachment`, `Content-Security-Policy: sandbox` and `no-store`; files are streamed, not stored | `web/downloads.py`, `tests/test_file_tools.py` |
 | Large Docmost responses exhausting memory | Responses are read with a size limit (`DOCMOST_MAX_RESPONSE_BYTES`) and a timeout | `docmost/ce.py` |
 | Secrets or content in logs | Logs carry ids only; a test checks that passwords, tokens, emails and page content do not appear | `tests/test_guard.py` |
 | Admin space restriction bypassed | `ALLOWED_SPACES` is checked in every tool, including writes; outside spaces answer like missing ones | `tools/spaces.py`, `tests/test_write_tools.py` |
@@ -75,6 +76,10 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - **Snapshots keep content** of pages that were later deleted or whose access
   was removed, until the retention period ends. Protect the database and its
   backups like Docmost's own.
+- **Download links are bearer links.** Whoever has one can download that one
+  file as the member until it expires, ten minutes after it was made. The
+  server keeps links out of its access log; a reverse proxy in front of it may
+  still log them.
 - **Rate limits are kept in memory** and reset on restart; run one server
   instance per Docmost.
 - **The reverse proxy is outside this project.** A proxy that forwards plain

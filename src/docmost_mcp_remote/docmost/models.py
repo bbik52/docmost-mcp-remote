@@ -156,6 +156,22 @@ class Suggestions(_Model):
     pages: list[LinkedPage] = Field(default_factory=list)
 
 
+ExportFormat = Literal["markdown", "html"]
+
+
+class Attachment(_Model):
+    """A file uploaded to a page."""
+
+    id: str
+    file_name: str = Field(alias="fileName")
+    file_size: int | None = Field(default=None, alias="fileSize")
+    mime_type: str | None = Field(default=None, alias="mimeType")
+    page_id: str | None = Field(default=None, alias="pageId")
+    space_id: str | None = Field(default=None, alias="spaceId")
+    creator: UserRef | None = None
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+
 class Label(_Model):
     id: str
     name: str
