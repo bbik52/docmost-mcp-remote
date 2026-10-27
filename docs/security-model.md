@@ -33,7 +33,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 
 1. Internet to the reverse proxy: https, terminated by the Admin's proxy.
 2. Proxy to the server: plain http on a private network or loopback;
-   `FORWARDED_ALLOW_IPS` decides whose `X-Forwarded-For` is believed.
+   `FORWARDED_ALLOW_IPS` decides whose `X-Forwarded-For` is believed; the
+   proxy overwrites the header, and the server warns at startup about `*`.
 3. Server to Docmost: https (http only with `DOCMOST_ALLOW_INSECURE_HTTP`).
    Every call carries the member's own Docmost token.
 4. Server to Postgres: credentials from the environment.
@@ -51,7 +52,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Open redirect or code theft through redirect URIs | Exact match against registered URIs; only https, loopback http or private-use schemes; no fragments | `oauth.py` `redirect_uri_allowed` |
 | Token for this server replayed elsewhere, or another server's token here | Tokens bound to `PUBLIC_URL/mcp` (RFC 8707); other resources refused | `oauth.py`, `tests/test_oauth.py` |
 | Stolen refresh token | Rotation on every use; reuse revokes the whole grant | `oauth.py`, `tests/test_oauth.py` |
-| Abuse of dynamic client registration | 10 registrations per IP per hour, 10 redirect URIs, 1000 clients, unused clients deleted after a day | `oauth.py`, `db/oauth_store.py` |
+| Abuse of dynamic client registration | 10 registrations per IP per hour, 10 redirect URIs, at most 1000 clients without a grant (the oldest stale ones make room for new ones), unused clients deleted after an hour | `oauth.py`, `db/oauth_store.py` |
 | Phishing through a client name on the consent page | The page shows the redirect host and the account; `write` and `delete` are never preselected | `web/templates/consent.html` |
 | Database leak | Sessions, passwords and snapshots are encrypted with a key that is not in the database; tokens are hashed | `crypto.py`, `db/snapshot_store.py` |
 | Key compromise | Rotation with `SECRET_KEY_PREVIOUS` and `admin rotate-key` | `admin.py`, `tests/test_admin.py` |
@@ -87,7 +88,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - **Rate limits are kept in memory** and reset on restart; run one server
   instance per Docmost.
 - **The reverse proxy is outside this project.** A proxy that forwards plain
-  http or trusts any `X-Forwarded-For` weakens the sign-in rate limits.
+  http, or passes on an `X-Forwarded-For` sent by the client, weakens the
+  sign-in and registration rate limits. The documented setups overwrite it.
 - **OAuth client secrets** of confidential clients are stored as registered;
   most MCP clients are public clients without a secret and rely on PKCE.
 

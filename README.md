@@ -180,8 +180,9 @@ services:
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
-      # The port is published on 127.0.0.1 only, so every client is a local proxy.
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Proxies on loopback or a private network; the client address is the last
+      # untrusted one in X-Forwarded-For, so a header sent by the client is ignored.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "127.0.0.1:8000:8000"
@@ -252,7 +253,7 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -262,10 +263,12 @@ server {
 
 </details>
 
-The server uses `X-Forwarded-For` for its per-IP rate limits. The compose
-file publishes the port on 127.0.0.1 only and trusts the header from every
-client; if you publish the port elsewhere, set `FORWARDED_ALLOW_IPS` to the
-proxy's address.
+The server uses `X-Forwarded-For` for its per-IP rate limits. The proxy must
+set the header to the address it sees, not pass on what the client sent: the
+nginx example above does that with `$remote_addr`, and Caddy and Traefik do it
+by default. The compose file trusts proxies on loopback and private networks
+(`FORWARDED_ALLOW_IPS`); if your proxy reaches the server from a public
+address, set it to that address.
 
 
 <a id="connecting-a-client"></a>
@@ -681,7 +684,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
-| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (`*` in the compose file) |
+| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (loopback and private networks in the compose file) |
 | `HOST` / `PORT` | no | `0.0.0.0` / `8000` | Listen address |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
 | `IMAGE_TAG` | no | `1` | Image tag used by `compose.yaml` |

@@ -181,6 +181,17 @@ def test_upload_link_limits(engine: AsyncEngine, docmost: FakeDocmost) -> None: 
         assert refused.status_code == 413
         assert "1 MB in total" in refused.json()["error"]
 
+        def chunks() -> Iterator[bytes]:
+            yield b"--x\r\n"
+
+        chunked = httpx.post(
+            f"{url}/files",
+            content=chunks(),
+            headers={"content-type": "multipart/form-data; boundary=x"},
+        )
+        assert chunked.status_code == 411
+        assert httpx.post(f"{url}/done", content=b" " * 70_000).status_code == 413
+
 
 def test_expired_links_are_deleted(
     server: RunningServer,
