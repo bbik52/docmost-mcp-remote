@@ -48,11 +48,23 @@ when upgrading lists it under "Upgrade notes".
 - Revoking a grant ends the download and upload links it made. Upload links
   made before this release stop working.
 - `restore_page` checks `ALLOWED_SPACES` before restoring, not after.
+- Docmost below 0.80.1 is refused, at sign-in and on every tool call. Older
+  releases let `replace_page_json` store `javascript:` URLs in attachment
+  nodes (CVE-2026-34212, fixed in 0.71.0) and `export_page` pull restricted
+  attachments in by a forged id (CVE-2026-48073, fixed in 0.80.1).
+- An email outside `ALLOWED_EMAILS` is refused after the Docmost sign-in
+  with the same error as a wrong password, so the answer and its timing no
+  longer tell which emails are allowed.
+- Files sent to upload links get their type from the file extension, not
+  from the browser or the model. HTML, JavaScript, XML and Flash are stored
+  as downloads, so a file cannot run as a page on the Docmost domain.
 
 ### Upgrade notes
 
 - If you set `FORWARDED_ALLOW_IPS=*` yourself, replace it with the address of
   your reverse proxy, and make nginx send `X-Forwarded-For $remote_addr`.
+- Docmost 0.80.1 or newer is required. Upgrade Docmost first: on an older
+  Docmost, members who are already signed in get an error on every tool call.
 
 ## [1.2.0] - 2026-10-26
 

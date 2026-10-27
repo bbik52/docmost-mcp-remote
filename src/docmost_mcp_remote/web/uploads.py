@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import re
 import secrets
 import uuid
 from datetime import timedelta
@@ -72,11 +73,36 @@ def safe_file_name(name: str) -> str:
     return "" if cleaned in ("", ".", "..") else cleaned
 
 
+#: Types a browser runs as a page or script; such files are stored as plain downloads.
+_ACTIVE_TYPES = frozenset(
+    {
+        "text/html",
+        "application/xhtml+xml",
+        "text/javascript",
+        "application/javascript",
+        "application/ecmascript",
+        "text/xml",
+        "application/xml",
+        "application/x-shockwave-flash",
+    }
+)
+_MIME_TYPE = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*")
+
+
 def guess_type(name: str, given: str | None) -> str:
-    kind = (given or "").split(";", 1)[0].strip().lower()
-    if kind and kind != "application/octet-stream":
-        return kind
-    return mimetypes.guess_type(name)[0] or "application/octet-stream"
+    """The type a file is stored with in Docmost.
+
+    The file name's extension decides; the type the sender declared is only
+    used when the extension is unknown. Whoever holds an upload link can send
+    files, so types a browser would run never reach Docmost.
+    """
+    kind = mimetypes.guess_type(name)[0]
+    if kind is None:
+        declared = (given or "").split(";", 1)[0].strip().lower()
+        kind = declared if _MIME_TYPE.fullmatch(declared) else None
+    if kind is None or kind in _ACTIVE_TYPES:
+        return "application/octet-stream"
+    return kind
 
 
 def _file(item: UploadFile) -> dict[str, Any]:

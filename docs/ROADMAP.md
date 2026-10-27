@@ -54,8 +54,8 @@ Scope:
   implementation over `httpx`: login, current user, spaces, pages
   (info, tree, recent, children), search, comments, page create/update,
   move to Trash, restore.
-- Version check: below 0.70.0 is refused; newer than the tested matrix logs
-  a warning. Docmost reports its version only to signed-in users, so the
+- Version check: below 0.70.0 is refused (0.80.1 since 1.2.1); newer than
+  the tested matrix logs a warning. Docmost reports its version only to signed-in users, so the
   server checks reachability at startup and the version at sign-in
   (see `docs/docmost-api-notes.md`).
 - Typed errors: auth expired, forbidden, not found, Docmost unavailable,

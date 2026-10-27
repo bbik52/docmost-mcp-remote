@@ -1,7 +1,7 @@
 # Docmost CE API notes
 
 What this server relies on, observed against running Docmost releases
-0.70.3, 0.96.0 and 0.97.0 (2026-10-25). Written from observed HTTP
+0.70.3, 0.80.1, 0.96.0 and 0.97.0 (2026-10-25 to 2026-10-27). Written from observed HTTP
 behavior; the integration tests in `tests/integration/` check it on every
 CI run. Nothing here is copied from Docmost or from other clients.
 
@@ -33,7 +33,8 @@ CI run. Nothing here is copied from Docmost or from other clients.
   **requires a session**. There is no public version endpoint.
 - Consequence: the server cannot check the version at startup. It checks
   reachability (`/api/health`) at startup and the version at each Member
-  sign-in; sign-in to a Docmost older than 0.70.0 is refused.
+  sign-in; sign-in to a Docmost older than 0.80.1 is refused, and tool
+  calls are refused when Docmost was downgraded below it.
 
 ## Pagination
 

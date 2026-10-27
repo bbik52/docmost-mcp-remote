@@ -128,7 +128,7 @@ Checked: Docmost master 0.97.0 (clone of 2026-10-25), and the original `docmost-
 Decision: use `/api/pages/update` with `format=markdown` as the only write path. Drop the Yjs WebSocket client, and with it finding 10 (WebSocket size limit) and finding 6 (collab auth by cookie).
 
 Consequences:
-- **Minimum supported Docmost is 0.70.0.** Older versions are refused by the version check at sign-in.
+- **Minimum supported Docmost is 0.70.0.** Older versions are refused by the version check at sign-in. Raised to 0.80.1 in 1.2.1: older releases have security advisories that the endpoints this server calls expose (CVE-2026-34212, CVE-2026-48073).
 - **Silent no-op risk.** If Docmost is run with `COLLAB_DISABLE_REDIS` set, the collaboration gateway has no Redis sync extension and `handleYjsEvent` returns without doing anything, while the endpoint still answers 200. The server must read the page back after a write and fail the tool call if the body did not change. This check also applies after the Snapshot is taken.
 - Writes are applied with a delay: Hocuspocus persists with a debounce of 10 s (max 45 s). A read right after a write goes through `pages/info`, which reads from the database, so the read-back should poll for a bounded time or read through the Yjs state. To verify with an integration test.
 - `replace` deletes and re-inserts the whole fragment. Comment marks on replaced text are lost, and a Member who has the page open sees it change. Prefer `append`/`prepend` where the tool allows it, and say so in the tool description.

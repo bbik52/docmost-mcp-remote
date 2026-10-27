@@ -10,7 +10,7 @@ A self-hosted remote [MCP](https://modelcontextprotocol.io) server for [Docmost]
 [![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
-[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#supported-docmost-versions)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.80.1%2B-6d28d9)](#supported-docmost-versions)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.bbik52/docmost-mcp-remote)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/bbik52/docmost-mcp-remote/blob/master/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/bbik52/docmost-mcp-remote?style=flat&logo=github&label=stars)](https://github.com/bbik52/docmost-mcp-remote/stargazers)
@@ -53,7 +53,7 @@ see and every change in Docmost carries their name.
   drop files in the browser, put them in order, and they land in the right
   place of the page.
 - 🐳 **Easy to host.** One container plus Postgres with a ready
-  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.70 to 0.97.
+  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.97.
 
 > ⭐ **If this server is useful to you, please [star the repository](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > It helps other Docmost users find it and tells us the work is worth continuing.
@@ -560,8 +560,11 @@ connection is allowed to use. Resource reads count against
 
 ## 📦 Supported Docmost versions
 
-Docmost Community Edition **0.70.0 or newer**. Older versions are refused at
-sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
+Docmost Community Edition **0.80.1 or newer**. Older versions are refused at
+sign-in and on every tool call: they have published security advisories that
+the endpoints this server calls expose (CVE-2026-34212, fixed in 0.71.0, and
+CVE-2026-48073, fixed in 0.80.1). CI runs the integration tests against
+Docmost 0.80.1, 0.96.0 and
 0.97.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and

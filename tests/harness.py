@@ -22,6 +22,8 @@ from tests.conftest import make_settings
 _CSRF = re.compile(r'name="csrf" value="([^"]+)"')
 _TOKEN = re.compile(r"dmr_[A-Za-z0-9_-]+")
 SIGN_IN_TIMEOUT = 60.0
+SIGN_IN_ATTEMPTS = 6
+SIGN_IN_BACKOFF = 15.0
 
 
 def _free_port() -> int:
@@ -64,9 +66,16 @@ class RunningServer:
         # Sign-in asks Docmost for its version, which Docmost checks against
         # GitHub; that can take longer than httpx's default five seconds.
         with httpx.Client(base_url=self.url, timeout=SIGN_IN_TIMEOUT) as web:
-            csrf = _CSRF.search(web.get("/login").text)
-            assert csrf
-            web.post("/login", data={"csrf": csrf.group(1), "email": email, "password": password})
+            for attempt in range(SIGN_IN_ATTEMPTS):
+                csrf = _CSRF.search(web.get("/login").text)
+                assert csrf
+                answer = web.post(
+                    "/login", data={"csrf": csrf.group(1), "email": email, "password": password}
+                )
+                # Docmost limits sign-ins to about ten a minute; the suite signs in more.
+                if "not available right now" not in answer.text or attempt == SIGN_IN_ATTEMPTS - 1:
+                    break
+                time.sleep(SIGN_IN_BACKOFF)
             csrf = _CSRF.search(web.get("/account").text)
             assert csrf, "sign-in failed"
             created = web.post(

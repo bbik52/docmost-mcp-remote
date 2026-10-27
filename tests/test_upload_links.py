@@ -17,6 +17,7 @@ from docmost_mcp_remote.db.engine import create_engine
 from docmost_mcp_remote.db.upload_store import UploadStore
 from docmost_mcp_remote.docmost.placement import Placement, insertion_index, place_files
 from docmost_mcp_remote.web import downloads
+from docmost_mcp_remote.web.uploads import guess_type
 from tests.conftest import DATABASE_TEST_URL, SECRET
 from tests.harness import RunningServer
 from tests.test_file_tools import docmost  # noqa: F401 - the fixture
@@ -280,3 +281,21 @@ def test_upload_attachment_at_a_place(
         server.call(token, "upload_attachment", {**args, "after_text": "nowhere"})
     sent = [item for item in docmost.recorder.requests if item.url.path == "/api/files/upload"]
     assert len(sent) == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "declared", "stored"),
+    [
+        ("photo.png", "text/html", "image/png"),
+        ("notes.txt", "", "text/plain"),
+        ("page.html", "text/html", "application/octet-stream"),
+        ("page.HTM", None, "application/octet-stream"),
+        ("tool.js", "image/png", "application/octet-stream"),
+        ("data.unknownext", "application/x-custom; charset=x", "application/x-custom"),
+        ("data.unknownext", "text/html", "application/octet-stream"),
+        ("data.unknownext", "not a type\r\nX: y", "application/octet-stream"),
+        ("README", None, "application/octet-stream"),
+    ],
+)
+def test_stored_types(name: str, declared: str | None, stored: str) -> None:
+    assert guess_type(name, declared) == stored
