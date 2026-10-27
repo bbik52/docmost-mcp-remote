@@ -44,6 +44,15 @@ def query(url: str) -> dict[str, str]:
     return {key: values[0] for key, values in parse_qs(urlsplit(url).query).items()}
 
 
+def returned_to(response: httpx.Response) -> str:
+    """The app URL on the page shown after the consent form."""
+    assert response.status_code == 200, response.text
+    link = re.search(r'<a href="([^"]+)"', response.text)
+    assert link
+    assert f'content="0;url={link.group(1)}"' in response.text
+    return html.unescape(link.group(1))
+
+
 class Flow:
     """Drives the browser side and the client side of the OAuth flow."""
 
@@ -118,8 +127,7 @@ class Flow:
                 "scope": list(scopes),
             },
         )
-        assert response.status_code == 303, response.text
-        return response.headers["location"]
+        return returned_to(response)
 
     def code(self, client_id: str, scopes: tuple[str, ...] = ()) -> tuple[str, str]:
         verifier, challenge = pkce()
@@ -323,7 +331,8 @@ def test_consent_page(flow: Flow) -> None:
     # write and delete are never preselected
     assert 'value="write" checked' not in page.text
     csp = page.headers["content-security-policy"]
-    assert "form-action 'self' http://127.0.0.1:9999;" in csp
+    # The answer goes back on a page, so the form never needs another target.
+    assert "form-action 'self';" in csp
     assert "frame-ancestors 'none'" in csp
 
 
@@ -353,7 +362,7 @@ def test_consent_is_single_use(flow: Flow) -> None:
     csrf = CSRF.search(flow.browser.get(path).text)
     assert csrf
     data = {"csrf": csrf.group(1), "request": query(path)["request"], "action": "approve"}
-    assert flow.browser.post("/oauth/consent", data=data).status_code == 303
+    assert flow.browser.post("/oauth/consent", data=data).status_code == 200
     again = flow.browser.post("/oauth/consent", data=data)
     assert again.status_code == 400
     assert "expired" in again.text
@@ -446,23 +455,24 @@ def test_other_paths_are_not_this_resource(flow: Flow, path: str) -> None:
     assert flow.resource in error["error_description"]
 
 
-def test_desktop_app_gets_a_page_that_opens_it(flow: Flow) -> None:
-    cursor = "cursor://anysphere.cursor-mcp/oauth/callback"
-    client_id = str(flow.register(redirect_uris=[cursor]).json()["client_id"])
+@pytest.mark.parametrize(
+    "callback",
+    ["cursor://anysphere.cursor-mcp/oauth/callback", "https://www.cursor.com/oauth/callback"],
+)
+def test_answer_goes_back_on_a_page(flow: Flow, callback: str) -> None:
+    # A redirect from the form post would be checked against form-action at
+    # every hop, which blocks callbacks that redirect again.
+    client_id = str(flow.register(redirect_uris=[callback]).json()["client_id"])
     _, challenge = pkce()
-    path = flow.consent_path(client_id, challenge, redirect_uri=cursor)
+    path = flow.consent_path(client_id, challenge, redirect_uri=callback)
     page = flow.browser.get(path)
     csrf = CSRF.search(page.text)
     assert csrf
     data = {"csrf": csrf.group(1), "request": query(path)["request"], "action": "approve"}
     response = flow.browser.post("/oauth/consent", data=data)
-    assert response.status_code == 200
-    link = re.search(r'<a href="([^"]+)"', response.text)
-    assert link
-    location = html.unescape(link.group(1))
-    assert location.startswith(f"{cursor}?")
+    location = returned_to(response)
+    assert location.startswith(f"{callback}?")
     assert set(query(location)) == {"code", "state"}
-    assert f'content="0;url={link.group(1)}"' in response.text
     assert response.headers["cache-control"] == "no-store"
 
 
