@@ -16,7 +16,10 @@ LABEL org.opencontainers.image.title="docmost-mcp-remote" \
       org.opencontainers.image.source="https://github.com/bbik52/docmost-mcp-remote" \
       org.opencontainers.image.licenses="Apache-2.0" \
       io.modelcontextprotocol.server.name="io.github.bbik52/docmost-mcp-remote"
-RUN groupadd --system --gid 10001 app \
+# The server never installs packages at run time; pip and the libraries it
+# vendors would only add code to patch.
+RUN python -m pip uninstall --yes --no-input pip \
+    && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build --chown=root:root /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
