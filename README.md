@@ -335,6 +335,8 @@ Then run `/mcp` in Claude Code to sign in.
 
 1. Open `PUBLIC_URL/login` and sign in with your Docmost email and password.
 2. On the account page, create a personal token with the scopes you need.
+   It expires after 90 days unless you pick another lifetime (7 days to a
+   year, or never).
 3. Configure the client with the endpoint and the header
    `Authorization: Bearer <token>`:
 
@@ -578,8 +580,10 @@ Members sign in with their own Docmost account; everything a client does is
 done as that member, with their Docmost rights. The server keeps the Docmost
 session token encrypted with a key derived from `SECRET_KEY` and does not
 store passwords unless `RELOGIN_MODE=stored_password`. Personal tokens are
-stored as hashes and shown once. The sign-in page has CSRF protection and
-per-IP and per-email rate limits.
+stored as hashes, shown once and expire after 90 days by default. The
+sign-in page has CSRF protection and per-IP and per-email rate limits, and
+"Sign out everywhere" on the account page ends its sessions in every
+browser.
 
 The server is its own OAuth 2.1 authorization server, following the MCP
 authorization spec: dynamic client registration (limited per IP, redirect
@@ -590,7 +594,9 @@ that rotate on every use. A reused refresh token or a replayed code revokes
 the whole grant. OAuth grants and personal tokens are listed and revoked on
 the same account page.
 
-Page content is treated as untrusted data and labelled as such for the model.
+Page content is treated as untrusted data and labelled as such for the model;
+titles and names, which are returned as plain fields, lose hidden and control
+characters and are cut at 300 characters.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write`, `delete` and `admin` only to clients you trust.
 Tool calls and resource reads are limited per member and recorded in an
