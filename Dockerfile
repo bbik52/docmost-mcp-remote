@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.13-slim AS build
-COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
+FROM python:3.13-slim@sha256:b3575dcf816cdacc5292df77a6e3e59b8941631078373a045efa2ac1e9c5c3b2 AS build
+COPY --from=ghcr.io/astral-sh/uv:0.9@sha256:538e0b39736e7feae937a65983e49d2ab75e1559d35041f9878b7b7e51de91e4 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
@@ -10,7 +10,7 @@ COPY README.md LICENSE NOTICE ./
 COPY src ./src
 RUN uv sync --locked --no-dev --no-editable
 
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:b3575dcf816cdacc5292df77a6e3e59b8941631078373a045efa2ac1e9c5c3b2
 LABEL org.opencontainers.image.title="docmost-mcp-remote" \
       org.opencontainers.image.description="Remote MCP server for Docmost Community Edition" \
       org.opencontainers.image.source="https://github.com/bbik52/docmost-mcp-remote" \

@@ -67,7 +67,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Admin space restriction bypassed | `ALLOWED_SPACES` is checked in every tool before it changes anything, including writes and restores from Trash; outside spaces answer like missing ones | `tools/spaces.py`, `tests/test_write_tools.py` |
 | A member who should lose access | Members revoke grants on the account page, which also ends the download and upload links the grant made; the Admin can revoke grants, all grants of a member, or disable a member; removing an email from `ALLOWED_EMAILS` stops that member's tokens, web session and links at once | `web/routes.py`, `admin.py` |
 | Container escape or tampering | Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges` | `Dockerfile`, `compose.yaml` |
-| Vulnerable dependencies | Locked dependencies, `pip-audit` in CI, Dependabot | `.github/workflows/ci.yml`, `.github/dependabot.yml` |
+| Vulnerable dependencies | Locked dependencies, `pip-audit` in CI, Dependabot; base images pinned by digest; the image is scanned with Trivy in CI and the published image every week | `.github/workflows/ci.yml`, `.github/workflows/scan.yml`, `.github/dependabot.yml`, `Dockerfile` |
+| A changed GitHub Action | Every action is pinned to a commit SHA, with its version in a comment; Dependabot proposes updates | `.github/workflows/` |
 
 ## Residual risks
 

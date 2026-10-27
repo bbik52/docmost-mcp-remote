@@ -9,6 +9,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Security
 
+- GitHub Actions are pinned to commit SHAs and the base images to digests.
+  CI scans the image with Trivy and fails on fixable critical or high
+  vulnerabilities, and the published image is scanned every week.
 - The client address used for rate limits can no longer be chosen by the
   client: the compose file trusts `X-Forwarded-For` only from proxies on
   loopback and private networks instead of from everyone, the nginx example

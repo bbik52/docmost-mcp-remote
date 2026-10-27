@@ -75,8 +75,9 @@ Release artifacts are not signed yet (ADR 0006).
     proposes the next patch number on its own), so Glama lists the new version.
 
 `release.yml` only runs on tags, so a mistake in it shows up at release
-time. When changing it, check that every action reference exists (a pinned
-commit or an existing tag).
+time. When changing it, check that every action reference exists. Actions
+are pinned to a commit SHA with the version in a comment
+(`uses: owner/action@<sha> # v1.2.3`); Dependabot keeps both up to date.
 
 A failed job can be re-run from the Actions page; PyPI, ghcr.io and the
 registry do not accept the same version twice with different content, so a
