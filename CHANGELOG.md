@@ -9,6 +9,11 @@ when upgrading lists it under "Upgrade notes".
 
 ### Security
 
+- GitHub Actions are pinned to commit SHAs and the base images to digests.
+  CI scans the image with Trivy and fails on fixable critical or high
+  vulnerabilities, and the published image is scanned every week.
+- The image no longer ships pip, whose vendored msgpack, urllib3 and
+  setuptools had known vulnerabilities; the server never used it.
 - Titles and names from Docmost (pages, spaces, people, groups, labels),
   which reach the model outside the untrusted-content wrapper, lose control,
   bidi and other hidden characters and are cut at 300 characters
