@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import re
 import secrets
+import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from importlib.resources import files
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -36,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_SCOPES = ("read", "write", "delete", "admin")
 _LOGIN_COOKIE_AGE = 60 * 60
+#: Lifetimes a personal token can get, in days; 0 never expires.
+_TOKEN_LIFETIMES = {"7": 7, "30": 30, "90": 90, "365": 365, "never": 0}
+_DEFAULT_TOKEN_DAYS = 90
 _CSP = (
     "default-src 'none'; style-src 'self'; form-action {form_action}; "
     "frame-ancestors 'none'; base-uri 'none'"
@@ -127,6 +132,7 @@ class WebPages:
             Route("/login", self.login_form, methods=["GET"]),
             Route("/login", self.login_submit, methods=["POST"]),
             Route("/logout", self.logout, methods=["POST"]),
+            Route("/logout/everywhere", self.logout_everywhere, methods=["POST"]),
             Route("/account", self.account, methods=["GET"]),
             Route("/account/tokens", self.create_token, methods=["POST"]),
             Route("/account/grants/{grant_id}/revoke", self.revoke_grant, methods=["POST"]),
@@ -172,7 +178,7 @@ class WebPages:
         return self._read_cookie(request, self._session_cookie, self._session_age)
 
     async def _active_member(self, session: dict[str, Any]) -> Member | None:
-        """The member of a web session, unless gone, disabled or no longer allowed."""
+        """The member of a web session, unless gone, disabled, no longer allowed or signed out."""
         member_id = uuid.UUID(session["m"])
         member = await self._store.get_member(member_id)
         if (
@@ -180,6 +186,10 @@ class WebPages:
             or await self._store.member_disabled(member_id)
             or not self._settings.email_allowed(member.email)
         ):
+            return None
+        # Sessions from before this release carry no sign-in time and count as old.
+        ended = member.web_sessions_after
+        if ended is not None and float(session.get("t") or 0) < ended.timestamp():
             return None
         return member
 
@@ -251,7 +261,7 @@ class WebPages:
         self._set_cookie(
             response,
             self._session_cookie,
-            {"m": str(member.id), "c": secrets.token_urlsafe(32)},
+            {"m": str(member.id), "c": secrets.token_urlsafe(32), "t": time.time()},
             self._session_age,
         )
         response.delete_cookie(self._login_cookie, path="/", secure=self._secure)
@@ -262,6 +272,17 @@ class WebPages:
         form = await request.form()
         response = RedirectResponse("/login", status_code=303)
         if session is not None and self._csrf_ok(form, session.get("c")):
+            response.delete_cookie(self._session_cookie, path="/", secure=self._secure)
+        return response
+
+    async def logout_everywhere(self, request: Request) -> Response:
+        """End the member's web sessions in every browser, this one included."""
+        session = self._web_session(request)
+        form = await request.form()
+        response = RedirectResponse("/login", status_code=303)
+        if session is not None and self._csrf_ok(form, session.get("c")):
+            await self._store.end_web_sessions(uuid.UUID(session["m"]))
+            logger.info("Member %s signed out everywhere", session["m"])
             response.delete_cookie(self._session_cookie, path="/", secure=self._secure)
         return response
 
@@ -310,9 +331,16 @@ class WebPages:
             return await self._account_page(session, error="Give the token a name.", status=400)
         requested = {str(value) for value in form.getlist("scope")}
         scopes = frozenset({"read"} | (requested & set(ALLOWED_SCOPES)))
-        _, token = await self._store.create_personal_token(uuid.UUID(session["m"]), name, scopes)
+        days = _TOKEN_LIFETIMES.get(str(form.get("expires") or ""), _DEFAULT_TOKEN_DAYS)
+        expires_at = datetime.now(UTC) + timedelta(days=days) if days else None
+        _, token = await self._store.create_personal_token(
+            uuid.UUID(session["m"]), name, scopes, expires_at
+        )
         logger.info(
-            "Member %s created a personal token with scopes %s", session["m"], sorted(scopes)
+            "Member %s created a personal token with scopes %s, expiring %s",
+            session["m"],
+            sorted(scopes),
+            expires_at.date().isoformat() if expires_at else "never",
         )
         return await self._account_page(session, new_token=token)
 

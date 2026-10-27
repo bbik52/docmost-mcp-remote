@@ -10,11 +10,11 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 |---|---|---|
 | Docmost session tokens of members | `docmost_sessions` | AES-256-GCM with a key derived from `SECRET_KEY`, bound to the member id |
 | Docmost passwords (only with `RELOGIN_MODE=stored_password`) | `docmost_sessions` | Same as session tokens; not stored at all by default |
-| Personal tokens, OAuth access and refresh tokens, authorization codes | `tokens`, `oauth_codes` | Only SHA-256 hashes are stored; tokens are shown once |
+| Personal tokens, OAuth access and refresh tokens, authorization codes | `tokens`, `oauth_codes` | Only SHA-256 hashes are stored; tokens are shown once; personal tokens expire after 90 days unless the member picks another lifetime |
 | Page content | Docmost; copies in `snapshots` | Snapshots are encrypted like sessions, private to the member, deleted after `SNAPSHOT_RETENTION_DAYS` |
 | Files sent to an upload link | `upload_files` | Encrypted like snapshots, bound to the link; the content is dropped once the file is in Docmost, and everything is deleted when the link expires (`UPLOAD_RETENTION_MINUTES`) |
 | Who did what | `audit_log` | Tool, page or space id, outcome, duration; never content or arguments; deleted after `AUDIT_RETENTION_DAYS` |
-| Web sessions of the account and consent pages | Browser cookie | Signed (itsdangerous), `HttpOnly`, `SameSite=Lax`, `__Host-` prefix and `Secure` over https |
+| Web sessions of the account and consent pages | Browser cookie | Signed (itsdangerous), `HttpOnly`, `SameSite=Lax`, `__Host-` prefix and `Secure` over https; "Sign out everywhere" ends every session of the member on the server (`members.web_sessions_after`) |
 
 ## Actors
 
@@ -56,7 +56,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Phishing through a client name on the consent page | The page shows the redirect host and the account; `write` and `delete` are never preselected | `web/templates/consent.html` |
 | Database leak | Sessions, passwords and snapshots are encrypted with a key that is not in the database; tokens are hashed | `crypto.py`, `db/snapshot_store.py` |
 | Key compromise | Rotation with `SECRET_KEY_PREVIOUS` and `admin rotate-key` | `admin.py`, `tests/test_admin.py` |
-| Prompt injection in page content | Content wrapped as untrusted data; scopes default to `read`; write tools take a snapshot first; delete only to Trash; space management only with the separate `admin` scope, and no removal of members or spaces; changes that widen who can read a page (moving or copying it to another space) and other risky changes ask the person through MCP elicitation, and fail closed when asking fails | `tools/untrusted.py`, `tools/write.py` |
+| Prompt injection in page content | Content wrapped as untrusted data; titles and names outside the wrapper lose hidden and control characters and are cut at 300 characters, and the notice names them; scopes default to `read`; write tools take a snapshot first; delete only to Trash; space management only with the separate `admin` scope, and no removal of members or spaces; changes that widen who can read a page (moving or copying it to another space) and other risky changes ask the person through MCP elicitation, and fail closed when asking fails | `tools/untrusted.py`, `docmost/models.py`, `tools/write.py` |
 | Irreversible overwrite | Snapshot before every body write; the write is not done if the snapshot fails; `restore_snapshot` | `tools/write.py`, `tests/test_write_tools.py` |
 | Docmost accepting a write and dropping it | Read-back after every write; the call fails and names the snapshot | `tools/write.py` |
 | A runaway agent hammering Docmost | `TOOL_CALLS_PER_MINUTE` per member over all clients; page and list size limits | `guard.py`, `tests/test_guard.py` |
