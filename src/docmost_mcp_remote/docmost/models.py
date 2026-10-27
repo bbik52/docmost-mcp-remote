@@ -6,10 +6,40 @@ that new Docmost releases do not break parsing.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+#: Characters a person cannot see or that change how the text around them
+#: reads: control characters, line and paragraph separators, bidi overrides
+#: and isolates, zero-width spaces and joiners other than the emoji joiner,
+#: invisible operators and Unicode tags, which can hide text from the reader.
+_HIDDEN = re.compile(
+    "[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069"
+    "\u200b\u200c\u2060-\u2064\ufeff\U000e0000-\U000e007f]+"
+)
+
+
+def _clean(limit: int) -> AfterValidator:
+    """Titles and names reach the model outside the untrusted-content envelope.
+
+    Hidden characters become one space, and the text is cut at ``limit``, so a
+    name cannot carry a page of instructions or text the person cannot see.
+    """
+
+    def clean(text: str) -> str:
+        text = _HIDDEN.sub(" ", text).strip()
+        return f"{text[:limit]}…" if len(text) > limit else text
+
+    return AfterValidator(clean)
+
+
+#: A title or a name read from Docmost.
+Name = Annotated[str, _clean(300)]
+#: A description read from Docmost.
+Description = Annotated[str, _clean(1000)]
 
 
 class _Model(BaseModel):
@@ -19,7 +49,7 @@ class _Model(BaseModel):
 class _PageBase(_Model):
     id: str
     slug_id: str = Field(alias="slugId")
-    title: str | None = None
+    title: Name | None = None
     icon: str | None = None
     parent_page_id: str | None = Field(default=None, alias="parentPageId")
     space_id: str = Field(alias="spaceId")
@@ -27,12 +57,12 @@ class _PageBase(_Model):
 
 class UserRef(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
 
 
 class CurrentUser(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
     email: str
     role: str | None = None
     workspace_id: str = Field(alias="workspaceId")
@@ -40,15 +70,15 @@ class CurrentUser(_Model):
 
 class SpaceRef(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
     slug: str | None = None
 
 
 class Space(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
     slug: str | None = None
-    description: str | None = None
+    description: Description | None = None
     visibility: str | None = None
     member_role: str | None = None
     member_count: int | None = Field(default=None, alias="memberCount")
@@ -65,7 +95,7 @@ class SpaceMember(_Model):
 
     id: str
     type: Literal["user", "group"]
-    name: str | None = None
+    name: Name | None = None
     email: str | None = None
     role: str | None = None
     member_count: int | None = Field(default=None, alias="memberCount")
@@ -73,7 +103,7 @@ class SpaceMember(_Model):
 
 class WorkspaceMember(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
     email: str | None = None
     role: str | None = None
     last_login_at: datetime | None = Field(default=None, alias="lastLoginAt")
@@ -82,8 +112,8 @@ class WorkspaceMember(_Model):
 
 class Group(_Model):
     id: str
-    name: str
-    description: str | None = None
+    name: Name
+    description: Description | None = None
     member_count: int | None = Field(default=None, alias="memberCount")
     is_default: bool | None = Field(default=None, alias="isDefault")
 
@@ -148,14 +178,14 @@ class LinkedPage(_PageBase):
 
 class SuggestedUser(_Model):
     id: str
-    name: str | None = None
+    name: Name | None = None
     email: str | None = None
 
 
 class SuggestedGroup(_Model):
     id: str
-    name: str
-    description: str | None = None
+    name: Name
+    description: Description | None = None
 
 
 class Suggestions(_Model):
@@ -184,7 +214,7 @@ class Attachment(_Model):
 
 class Label(_Model):
     id: str
-    name: str
+    name: Name
 
 
 class SearchHit(_PageBase):
@@ -226,7 +256,7 @@ class HistoryEntry(_Model):
 
     id: str
     page_id: str = Field(alias="pageId")
-    title: str | None = None
+    title: Name | None = None
     created_at: datetime | None = Field(default=None, alias="createdAt")
     last_updated_by: UserRef | None = Field(default=None, alias="lastUpdatedBy")
     contributors: list[UserRef] = Field(default_factory=list)

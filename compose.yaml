@@ -23,8 +23,9 @@ services:
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
-      # The port is published on 127.0.0.1 only, so every client is a local proxy.
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Proxies on loopback or a private network; the client address is the last
+      # untrusted one in X-Forwarded-For, so a header sent by the client is ignored.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "127.0.0.1:8000:8000"

@@ -47,8 +47,10 @@ CODE_TTL = timedelta(minutes=5)
 REQUEST_TTL = timedelta(minutes=15)
 CONSENT_PATH = "/oauth/consent"
 
-#: Abuse limits for dynamic client registration.
-MAX_CLIENTS = 1000
+#: Abuse limits for dynamic client registration. Only clients that never got a
+#: grant count; at the limit the oldest of them whose consent request has
+#: expired make room for new ones, so flooding cannot lock out real clients.
+MAX_UNUSED_CLIENTS = 1000
 MAX_REDIRECT_URIS = 10
 REGISTRATIONS_PER_IP = (10, 60 * 60)
 
@@ -172,11 +174,17 @@ class DocmostOAuthProvider(OAuthProvider):
                 )
         if client_info.client_name and len(client_info.client_name) > 200:
             raise RegistrationError("invalid_client_metadata", "client_name is too long.")
-        if await self._oauth.count_clients() >= MAX_CLIENTS:
-            logger.warning("Client registration refused: %d clients registered", MAX_CLIENTS)
-            raise RegistrationError(
-                "invalid_client_metadata", "This server does not accept new clients right now."
+        unused = await self._oauth.count_unused_clients()
+        if unused >= MAX_UNUSED_CLIENTS:
+            evicted = await self._oauth.evict_unused_clients(
+                unused - MAX_UNUSED_CLIENTS + 1, REQUEST_TTL
             )
+            if unused - evicted >= MAX_UNUSED_CLIENTS:
+                logger.warning("Client registration refused: %d unused clients registered", unused)
+                raise RegistrationError(
+                    "invalid_client_metadata", "This server does not accept new clients right now."
+                )
+            logger.warning("Removed %d unused clients to make room for a new one", evicted)
         if client_info.client_id is None:
             raise RegistrationError("invalid_client_metadata", "Missing client id.")
         await self._oauth.save_client(client_info.client_id, client_info.model_dump_json())
@@ -205,6 +213,8 @@ class DocmostOAuthProvider(OAuthProvider):
             return None
         stored = await self._oauth.load_code(authorization_code)
         if stored is None or stored.client_id != client.client_id:
+            return None
+        if not self._settings.email_allowed(stored.email):
             return None
         if stored.used:
             # RFC 6749 section 4.1.2: a replayed code revokes what it issued.
@@ -247,6 +257,8 @@ class DocmostOAuthProvider(OAuthProvider):
             return None
         stored = await self._oauth.load_token(refresh_token)
         if stored is None or stored.kind != "refresh" or stored.client_id != client.client_id:
+            return None
+        if not self._settings.email_allowed(stored.email):
             return None
         if stored.replaced:
             await self._revoke_grant(stored.grant_id, "refresh token reused")
@@ -309,7 +321,8 @@ class DocmostOAuthProvider(OAuthProvider):
         if not token.startswith(TOKEN_PREFIX) or len(token) > 200:
             return None
         owner = await self._store.find_token(token)
-        if owner is None:
+        # ALLOWED_EMAILS applies to tokens issued before an email was removed from it.
+        if owner is None or not self._settings.email_allowed(owner.email):
             return None
         if owner.kind == "access" and _normalize_resource(owner.resource) != self.resource_url:
             return None

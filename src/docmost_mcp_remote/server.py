@@ -187,7 +187,7 @@ def create_server(
         return JSONResponse({"status": "ok", "version": __version__})
 
     pages = WebPages(settings, store, oauth, members)
-    links = DownloadLinks(settings, members, cipher)
+    links = DownloadLinks(settings, store, members, cipher)
     for route in [*pages.routes(), *links.routes(), *uploads.routes()]:
         mcp.custom_route(route.path, methods=sorted(route.methods or []), include_in_schema=False)(
             route.endpoint

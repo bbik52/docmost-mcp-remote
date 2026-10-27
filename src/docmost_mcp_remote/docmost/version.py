@@ -28,8 +28,11 @@ def parse_version(text: str) -> Version:
     return Version(major, minor, patch)
 
 
-#: Oldest release with ``format``/``operation`` support in ``pages/update``.
-MIN_SUPPORTED = Version(0, 70, 0)
+#: Oldest release without a published security advisory that the endpoints this
+#: server calls expose: 0.71.0 fixed javascript: URLs in attachment nodes of page
+#: JSON (CVE-2026-34212), 0.80.1 restricted attachments pulled into page exports
+#: by a forged attachment id (CVE-2026-48073).
+MIN_SUPPORTED = Version(0, 80, 1)
 #: Newest release the integration tests run against.
 MAX_TESTED = Version(0, 97, 0)
 

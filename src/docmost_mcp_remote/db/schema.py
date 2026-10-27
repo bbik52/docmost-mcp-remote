@@ -47,6 +47,8 @@ members = Table(
     _now(),
     Column("last_login_at", DateTime(timezone=True)),
     Column("disabled_at", DateTime(timezone=True)),
+    #: Web sessions signed in before this time are no longer accepted.
+    Column("web_sessions_after", DateTime(timezone=True)),
 )
 
 #: The member's Docmost session, encrypted. One row per member.
@@ -218,6 +220,13 @@ upload_links = Table(
         UUID(as_uuid=True),
         ForeignKey("members.id", ondelete="CASCADE"),
         nullable=False,
+    ),
+    #: The grant that made the link; revoking it ends the link. Empty in links
+    #: made before 1.2.1, which no longer work.
+    Column(
+        "grant_id",
+        UUID(as_uuid=True),
+        ForeignKey("grants.id", ondelete="CASCADE"),
     ),
     #: SHA-256 of the token in the link.
     Column("token_hash", LargeBinary, nullable=False, unique=True),

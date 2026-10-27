@@ -10,7 +10,7 @@
 [![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
-[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#supported-docmost-versions)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.80.1%2B-6d28d9)](#supported-docmost-versions)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.bbik52/docmost-mcp-remote)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/bbik52/docmost-mcp-remote?style=flat&logo=github&label=stars)](https://github.com/bbik52/docmost-mcp-remote/stargazers)
@@ -52,7 +52,7 @@
   перетащите файлы в браузере, расставьте по порядку, и они попадут в нужное
   место страницы.
 - 🐳 **Легко развернуть.** Один контейнер и Postgres с готовым `compose.yaml`
-  или `pip install`. CI проверяет работу с Docmost от 0.70 до 0.97.
+  или `pip install`. CI проверяет работу с Docmost от 0.80.1 до 0.97.
 
 > ⭐ **Если сервер вам пригодился, пожалуйста, [поставьте звезду репозиторию](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > Так его проще найти другим пользователям Docmost, а нам понятно, что работа нужна.
@@ -179,8 +179,9 @@ services:
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
-      # The port is published on 127.0.0.1 only, so every client is a local proxy.
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Proxies on loopback or a private network; the client address is the last
+      # untrusted one in X-Forwarded-For, so a header sent by the client is ignored.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "127.0.0.1:8000:8000"
@@ -251,7 +252,7 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -261,10 +262,12 @@ server {
 
 </details>
 
-Сервер использует `X-Forwarded-For` для ограничений частоты по IP. Файл
-compose публикует порт только на 127.0.0.1 и доверяет этому заголовку от
-любого клиента; если публикуете порт иначе, укажите в `FORWARDED_ALLOW_IPS`
-адрес прокси.
+Сервер использует `X-Forwarded-For` для ограничений частоты по IP. Прокси
+должен записывать в заголовок адрес, который видит сам, а не передавать
+присланный клиентом: пример nginx выше делает это через `$remote_addr`, Caddy
+и Traefik делают так по умолчанию. Файл compose доверяет прокси на loopback и
+в частных сетях (`FORWARDED_ALLOW_IPS`); если прокси обращается к серверу с
+публичного адреса, укажите этот адрес.
 
 <a id="connecting-a-client"></a>
 
@@ -330,6 +333,8 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 
 1. Откройте `PUBLIC_URL/login` и войдите почтой и паролем Docmost.
 2. На странице аккаунта создайте персональный токен с нужными правами.
+   Он действует 90 дней, если не выбрать другой срок (от 7 дней до года или
+   бессрочно).
 3. Настройте клиент на адрес MCP и заголовок
    `Authorization: Bearer <токен>`:
 
@@ -490,10 +495,12 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
   запущен с `COLLAB_DISABLE_REDIS`).
 - **Подтверждение.** Перед рискованными изменениями сервер спрашивает вас в
   клиенте, если клиент это умеет (MCP elicitation): перемещение страницы в
-  корзину, роли людей и групп в пространстве, приглашения, смена роли в
-  рабочем пространстве и отключение человека. Вопрос получаете вы, а не
-  модель, поэтому текст на странице не может на него ответить. Клиенты,
-  которые спрашивать не умеют, выполняют эти изменения без вопроса, в пределах
+  корзину, перенос или копирование страницы в другое пространство, роли людей
+  и групп в пространстве, приглашения, смена роли в рабочем пространстве и
+  отключение человека. Вопрос получаете вы, а не модель, поэтому текст на
+  странице не может на него ответить. Если клиент заявил, что умеет
+  спрашивать, но вопрос не удался, ничего не меняется. Клиенты, которые
+  спрашивать не умеют, выполняют эти изменения без вопроса, в пределах
   выданных вами прав.
 - **Занятые страницы.** Изменение, которое переписывает всё тело (замена,
   раздел, запись JSON, восстановление), не выполняется, пока страницу
@@ -554,8 +561,11 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 
 ## 📦 Поддерживаемые версии Docmost
 
-Docmost Community Edition **0.70.0 и новее**. Более старые версии
-отклоняются при входе. CI прогоняет интеграционные тесты на Docmost 0.70.3,
+Docmost Community Edition **0.80.1 и новее**. Более старые версии
+отклоняются при входе и при каждом вызове инструмента: в них есть
+опубликованные уязвимости, доступные через методы, которые вызывает этот
+сервер (CVE-2026-34212, исправлена в 0.71.0, и CVE-2026-48073, исправлена в
+0.80.1). CI прогоняет интеграционные тесты на Docmost 0.80.1,
 0.96.0 и 0.97.0; более новые релизы в большинстве случаев работают и пишут в
 лог предупреждение, пока их не добавят в проверяемый диапазон. Пользователи,
 которые входят в Docmost только через SSO (функция Enterprise), не смогут
@@ -572,9 +582,11 @@ Docmost Community Edition **0.70.0 и новее**. Более старые ве
 выполняется от имени этого участника и с его правами в Docmost. Сервер
 хранит сессионный токен Docmost зашифрованным ключом, производным от
 `SECRET_KEY`, и не хранит пароли, если не включён
-`RELOGIN_MODE=stored_password`. Персональные токены хранятся в виде хешей и
-показываются один раз. Страница входа защищена от CSRF и ограничивает
-частоту попыток по IP и по email.
+`RELOGIN_MODE=stored_password`. Персональные токены хранятся в виде хешей,
+показываются один раз и по умолчанию действуют 90 дней. Страница входа
+защищена от CSRF и ограничивает частоту попыток по IP и по email, а кнопка
+«Sign out everywhere» на странице аккаунта завершает её сессии во всех
+браузерах.
 
 Сервер сам является сервером авторизации OAuth 2.1 по спецификации
 авторизации MCP: динамическая регистрация клиентов (с ограничением по IP;
@@ -586,7 +598,8 @@ redirect URI, токены привязаны к ресурсу `/mcp` этог�
 доступы и персональные токены видны и отзываются на одной странице аккаунта.
 
 Содержимое страниц считается недоверенными данными и помечается так для
-модели. Инъекция инструкций в тексте страницы всё равно может заставить
+модели; из заголовков и имён, которые возвращаются отдельными полями,
+удаляются скрытые и управляющие символы, и они обрезаются до 300 символов. Инъекция инструкций в тексте страницы всё равно может заставить
 клиента действовать в пределах прав, которые выдал участник, поэтому `write`,
 `delete` и `admin` выдавайте только клиентам, которым доверяете. Вызовы инструментов
 и чтение ресурсов ограничены по частоте для каждого участника и пишутся в
@@ -684,7 +697,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `RELOGIN_MODE` | нет | `ask` | `ask`: участник входит заново, когда истекает его сессия Docmost; `stored_password`: пароль хранится зашифрованным и используется для повторного входа |
 | `DOCMOST_TIMEOUT_SECONDS` | нет | `15` | Таймаут одного запроса к Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | нет | `5242880` | Самый большой ответ Docmost, который читает сервер |
-| `FORWARDED_ALLOW_IPS` | нет | `127.0.0.1` | Прокси, которым доверяется `X-Forwarded-For` (`*` в файле compose) |
+| `FORWARDED_ALLOW_IPS` | нет | `127.0.0.1` | Прокси, которым доверяется `X-Forwarded-For` (loopback и частные сети в файле compose) |
 | `HOST` / `PORT` | нет | `0.0.0.0` / `8000` | Адрес, на котором слушает сервер |
 | `LOG_LEVEL` | нет | `info` | `debug`, `info`, `warning` или `error` |
 | `IMAGE_TAG` | нет | `1` | Тег образа в `compose.yaml` |

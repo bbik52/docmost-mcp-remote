@@ -30,11 +30,17 @@ Release artifacts are not signed yet (ADR 0006).
   as described in DESIGN.md, "Contributions and project security".
 - **Glama**: claim the server on <https://glama.ai/mcp/servers> with the
   GitHub account named in `glama.json`. In its admin Dockerfile settings use
-  Python 3.13, the build steps `["pip install ."]` and the CMD arguments
+  the build steps
+  `["uv pip install --python /usr/local/bin/python --break-system-packages ."]`
+  and the CMD arguments
   `["python", "-m", "docmost_mcp_remote", "--tool-catalog"]`, with no
-  environment variables (Glama refuses a command containing `mcp-remote`,
-  mistaking it for the npm proxy of that name):
-  the catalog mode lists the tools without Docmost or a database.
+  environment variables. Glama's image links a uv-managed Python to
+  `/usr/local/bin/python`; it has no `pip`, is marked as externally managed,
+  and `uv pip --system` may pick another interpreter, hence the explicit
+  `--python` and the flag. Glama
+  also refuses a command containing `mcp-remote`, mistaking it for the npm
+  proxy of that name. The catalog mode lists the tools without Docmost or a
+  database.
 
 ## Cutting a release
 
@@ -65,11 +71,13 @@ Release artifacts are not signed yet (ADR 0006).
    project version, is not on `master` or has no changelog entry.
 9. Merge `master` back into `develop`.
 10. On Glama, open the server's admin Dockerfile page, press Deploy, wait for
-    the test to pass, then Make Release, so Glama lists the new version.
+    the test to pass, then Make Release with the version of the tag (Glama
+    proposes the next patch number on its own), so Glama lists the new version.
 
 `release.yml` only runs on tags, so a mistake in it shows up at release
-time. When changing it, check that every action reference exists (a pinned
-commit or an existing tag).
+time. When changing it, check that every action reference exists. Actions
+are pinned to a commit SHA with the version in a comment
+(`uses: owner/action@<sha> # v1.2.3`); Dependabot keeps both up to date.
 
 A failed job can be re-run from the Actions page; PyPI, ghcr.io and the
 registry do not accept the same version twice with different content, so a

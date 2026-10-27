@@ -96,3 +96,15 @@ async def test_disabled_member_and_expired_token(engine: AsyncEngine) -> None:
         await connection.execute(update(members).values(disabled_at=now()))
     assert await store.find_token(token) is None
     assert await store.member_disabled(member.id)
+
+
+async def test_personal_token_with_expiry(engine: AsyncEngine) -> None:
+    store = Store(engine)
+    member = await store.upsert_member("e1", "a@example.com", None)
+    soon = now() + timedelta(days=7)
+    _, token = await store.create_personal_token(member.id, "x", frozenset({"read"}), soon)
+    owner = await store.find_token(token)
+    assert owner is not None
+    assert owner.expires_at == soon
+    [grant] = await store.list_grants(member.id)
+    assert grant.expires_at == soon

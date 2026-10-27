@@ -16,8 +16,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
       - run: uv sync --locked
@@ -46,8 +46,8 @@ jobs:
       matrix:
         python: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           python-version: ${{ matrix.python }}
@@ -57,8 +57,8 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
       - run: uv sync --locked
@@ -76,7 +76,7 @@ jobs:
       matrix:
         # Oldest supported, previous and newest tested release. "latest" warns early
         # when a new Docmost release is out and the tested range needs a bump.
-        docmost: ["0.70.3", "0.96.0", "0.97.0"]
+        docmost: ["0.80.1", "0.96.0", "0.97.0"]
         canary: [false]
         include:
           - docmost: latest
@@ -98,8 +98,8 @@ jobs:
       DOCMOST_TEST_URL: http://localhost:3000
       DATABASE_TEST_URL: postgresql://test:test@localhost:5433/test
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
       - name: Start Docmost
@@ -121,7 +121,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare .env
         run: |
           cp .env.example .env
@@ -140,6 +140,14 @@ jobs:
           curl -fsS http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp
           docker compose exec -T server docmost-mcp-remote admin members
           test "$(docker image inspect -f '{{index .Config.Labels "io.modelcontextprotocol.server.name"}}' ghcr.io/bbik52/docmost-mcp-remote:ci)" = io.github.bbik52/docmost-mcp-remote
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/bbik52/docmost-mcp-remote:ci
+          version: v0.76.1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
       - name: Logs
         if: always()
         run: docker compose logs

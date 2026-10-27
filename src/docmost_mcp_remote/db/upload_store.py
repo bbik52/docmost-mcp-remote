@@ -12,7 +12,7 @@ from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from docmost_mcp_remote.crypto import Cipher, hash_token
-from docmost_mcp_remote.db.schema import upload_files, upload_links
+from docmost_mcp_remote.db.schema import grants, upload_files, upload_links
 from docmost_mcp_remote.db.store import now
 
 LinkState = Literal["open", "adding", "done"]
@@ -72,6 +72,7 @@ class UploadStore:
         self,
         *,
         member_id: uuid.UUID,
+        grant_id: uuid.UUID,
         token: str,
         page_id: str,
         details: dict[str, Any],
@@ -87,6 +88,7 @@ class UploadStore:
                 upload_links.insert().values(
                     id=link_id,
                     member_id=member_id,
+                    grant_id=grant_id,
                     token_hash=hash_token(token),
                     page_id=page_id,
                     details=sealed,
@@ -115,9 +117,17 @@ class UploadStore:
         )
 
     async def by_token(self, token: str) -> UploadLink | None:
-        """The link a token opens; None when unknown or expired."""
-        query = select(upload_links).where(
-            and_(upload_links.c.token_hash == hash_token(token), upload_links.c.expires_at > now())
+        """The link a token opens; None when unknown, expired or its grant was revoked."""
+        query = (
+            select(upload_links)
+            .select_from(upload_links.join(grants, upload_links.c.grant_id == grants.c.id))
+            .where(
+                and_(
+                    upload_links.c.token_hash == hash_token(token),
+                    upload_links.c.expires_at > now(),
+                    grants.c.revoked_at.is_(None),
+                )
+            )
         )
         async with self.engine.connect() as connection:
             row = (await connection.execute(query)).one_or_none()

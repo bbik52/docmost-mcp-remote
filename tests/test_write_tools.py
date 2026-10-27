@@ -246,9 +246,15 @@ class FakeDocmost:
             page["parentPageId"] = None
             return httpx.Response(200, json={"success": True, "status": 200})
 
+        def space_info(request: httpx.Request) -> httpx.Response:
+            wanted = json.loads(request.content)["spaceId"]
+            found = [space for space in SPACES if space["id"] == wanted]
+            return ok(found[0]) if found else error(404, "Space not found")
+
         routes.update(
             {
                 "/api/spaces": ok({"items": SPACES, "meta": {"hasNextPage": False}}),
+                "/api/spaces/info": space_info,
                 "/api/pages/info": info,
                 "/api/pages/history": history,
                 "/api/pages/history/info": history_info,
@@ -790,3 +796,38 @@ async def test_snapshots_are_private_and_expire(engine: AsyncEngine) -> None:
         await connection.execute(update(snapshots).values(created_at=now() - timedelta(days=31)))
     assert await snapshots_store.cleanup(timedelta(days=30)) == 1
     assert await snapshots_store.load(anna.id, snapshot_id) is None
+
+
+def test_other_spaces_ask_the_person(server: RunningServer, docmost: FakeDocmost) -> None:
+    token = server.token(scopes=("write",))
+    asked: list[str] = []
+    for tool, arguments in (
+        ("move_page_to_space", {"page": "p2", "space_id": "s2"}),
+        ("duplicate_page", {"page": "p1", "target_space_id": "s2"}),
+    ):
+        with pytest.raises(ToolError, match="the person declined"):
+            server.call_asked(token, tool, arguments, answer=False, asked=asked)
+    assert asked == [
+        'Move the page "Second" and its child pages to the space "Other"? '
+        "Everyone in that space will be able to read them.",
+        'Copy the page "Guide" and its child pages to the space "Other"? '
+        "Everyone in that space will be able to read the copy.",
+    ]
+    assert docmost.requests("pages/move-to-space") == []
+    assert docmost.requests("pages/duplicate") == []
+    moved = server.call_asked(
+        token, "move_page_to_space", {"page": "p2", "space_id": "s2"}, answer=True, asked=asked
+    )
+    assert moved["space_id"] == "s2"
+
+
+def test_restore_checks_the_space_first(engine: AsyncEngine, docmost: FakeDocmost) -> None:
+    docmost.pages["p1"]["deletedAt"] = "2026-10-01T00:00:00Z"
+    docmost.pages["p3"]["deletedAt"] = "2026-10-01T00:00:00Z"
+    with RunningServer(docmost.recorder.client(), allowed_spaces="general") as server:
+        token = server.token(scopes=("delete",))
+        with pytest.raises(ToolError, match="not found"):
+            server.call(token, "restore_page", {"page": "p3"})
+        assert docmost.requests("pages/restore") == []
+        assert server.call(token, "restore_page", {"page": "p1"})["restored"] is True
+    assert docmost.pages["p3"]["deletedAt"] is not None

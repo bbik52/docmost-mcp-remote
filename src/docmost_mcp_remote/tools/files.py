@@ -21,7 +21,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import require_scopes
 from pydantic import Field
 
-from docmost_mcp_remote.auth import current_member_id
+from docmost_mcp_remote.auth import current_grant_id, current_member_id
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend, DocmostResponseTooLargeError
@@ -141,6 +141,7 @@ def register(
         ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
+        grant_id = current_grant_id()
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
@@ -168,7 +169,7 @@ def register(
                     }
             return {
                 **base,
-                **links.create(member_id, "page_export", args),
+                **links.create(member_id, grant_id, "page_export", args),
                 "note": _LINK_NOTE,
             }
 
@@ -193,6 +194,7 @@ def register(
         ] = False,
     ) -> dict[str, Any]:
         member_id = current_member_id()
+        grant_id = current_grant_id()
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             await policy.check(backend, space_id)
@@ -207,7 +209,7 @@ def register(
             return {
                 "space_id": space_id,
                 "format": format,
-                **links.create(member_id, "space_export", args),
+                **links.create(member_id, grant_id, "space_export", args),
                 "note": _LINK_NOTE,
             }
 
@@ -251,6 +253,7 @@ def register(
         ],
     ) -> dict[str, Any]:
         member_id = current_member_id()
+        grant_id = current_grant_id()
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             item = await backend.attachment_info(attachment_id)
@@ -264,6 +267,7 @@ def register(
                 **_attachment(item),
                 **links.create(
                     member_id,
+                    grant_id,
                     "attachment",
                     {"attachment_id": item.id, "file_name": item.file_name},
                 ),
@@ -320,13 +324,14 @@ def register(
         page: PageRef, after_heading: AfterHeading = None, after_text: AfterText = None
     ) -> dict[str, Any]:
         member_id = current_member_id()
+        grant_id = current_grant_id()
         placement = placement_of(after_heading, after_text)
 
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             found = await load_page(backend, page)
             await check_place(backend, found, placement)
             created = await uploads.create(
-                member_id, found, page_link(docmost_base, found), placement
+                member_id, grant_id, found, page_link(docmost_base, found), placement
             )
             return {
                 "page_id": found.id,
@@ -386,7 +391,11 @@ def register(
             Field(max_length=(MAX_UPLOAD_BYTES * 4) // 3 + 4, description="The file, base64."),
         ],
         mime_type: Annotated[
-            str | None, Field(description="Guessed from the file name when left out.")
+            str | None,
+            Field(
+                description="Type of the file; only used when the file name has no known "
+                "extension. Pages and scripts (HTML, JavaScript, XML) are stored as downloads."
+            ),
         ] = None,
         add_to_page: Annotated[
             bool, Field(description="Also show the file in the page body; false only attaches it.")

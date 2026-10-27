@@ -17,6 +17,7 @@ from docmost_mcp_remote.db.engine import create_engine
 from docmost_mcp_remote.db.upload_store import UploadStore
 from docmost_mcp_remote.docmost.placement import Placement, insertion_index, place_files
 from docmost_mcp_remote.web import downloads
+from docmost_mcp_remote.web.uploads import guess_type
 from tests.conftest import DATABASE_TEST_URL, SECRET
 from tests.harness import RunningServer
 from tests.test_file_tools import docmost  # noqa: F401 - the fixture
@@ -181,6 +182,17 @@ def test_upload_link_limits(engine: AsyncEngine, docmost: FakeDocmost) -> None: 
         assert refused.status_code == 413
         assert "1 MB in total" in refused.json()["error"]
 
+        def chunks() -> Iterator[bytes]:
+            yield b"--x\r\n"
+
+        chunked = httpx.post(
+            f"{url}/files",
+            content=chunks(),
+            headers={"content-type": "multipart/form-data; boundary=x"},
+        )
+        assert chunked.status_code == 411
+        assert httpx.post(f"{url}/done", content=b" " * 70_000).status_code == 413
+
 
 def test_expired_links_are_deleted(
     server: RunningServer,
@@ -207,8 +219,17 @@ async def test_cleanup_deletes_expired_links(engine: AsyncEngine) -> None:
             )
         )
         member_id = member.scalar_one()
+        grant = await connection.execute(
+            text(
+                "INSERT INTO grants (id, member_id, kind, name, scopes) "
+                "VALUES (gen_random_uuid(), :member, 'personal', 'x', 'write') RETURNING id"
+            ),
+            {"member": member_id},
+        )
+        grant_id = grant.scalar_one()
     kept = await store.create(
         member_id=member_id,
+        grant_id=grant_id,
         token="kept",
         page_id="p1",
         details={},
@@ -216,6 +237,7 @@ async def test_cleanup_deletes_expired_links(engine: AsyncEngine) -> None:
     )
     gone = await store.create(
         member_id=member_id,
+        grant_id=grant_id,
         token="gone",
         page_id="p1",
         details={},
@@ -259,3 +281,21 @@ def test_upload_attachment_at_a_place(
         server.call(token, "upload_attachment", {**args, "after_text": "nowhere"})
     sent = [item for item in docmost.recorder.requests if item.url.path == "/api/files/upload"]
     assert len(sent) == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "declared", "stored"),
+    [
+        ("photo.png", "text/html", "image/png"),
+        ("notes.txt", "", "text/plain"),
+        ("page.html", "text/html", "application/octet-stream"),
+        ("page.HTM", None, "application/octet-stream"),
+        ("tool.js", "image/png", "application/octet-stream"),
+        ("data.unknownext", "application/x-custom; charset=x", "application/x-custom"),
+        ("data.unknownext", "text/html", "application/octet-stream"),
+        ("data.unknownext", "not a type\r\nX: y", "application/octet-stream"),
+        ("README", None, "application/octet-stream"),
+    ],
+)
+def test_stored_types(name: str, declared: str | None, stored: str) -> None:
+    assert guess_type(name, declared) == stored

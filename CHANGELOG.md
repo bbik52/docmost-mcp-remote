@@ -7,6 +7,70 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-27
+
+### Security
+
+- GitHub Actions are pinned to commit SHAs and the base images to digests.
+  CI scans the image with Trivy and fails on fixable critical or high
+  vulnerabilities, and the published image is scanned every week.
+- The image no longer ships pip, whose vendored msgpack, urllib3 and
+  setuptools had known vulnerabilities; the server never used it.
+- Titles and names from Docmost (pages, spaces, people, groups, labels),
+  which reach the model outside the untrusted-content wrapper, lose control,
+  bidi and other hidden characters and are cut at 300 characters
+  (descriptions at 1000). The notice for the model now names them.
+- "Sign out everywhere" on the account page ends the member's account page
+  sessions in every browser, on the server, not only by deleting the cookie.
+- Personal tokens can expire: 7, 30, 90 or 365 days, or never. New tokens
+  expire after 90 days unless the member picks another lifetime, and the
+  account page shows when each one expires. Tokens made before keep working
+  without an expiry.
+- The client address used for rate limits can no longer be chosen by the
+  client: the compose file trusts `X-Forwarded-For` only from proxies on
+  loopback and private networks instead of from everyone, the nginx example
+  overwrites the header, and the server warns at startup about
+  `FORWARDED_ALLOW_IPS=*`.
+- Dynamic client registration can no longer be locked by filling it: only
+  clients without a grant count against the limit of 1000, the oldest of them
+  whose consent request has expired make room for new ones, and unused
+  clients are deleted after an hour instead of a day.
+- Upload links refuse bodies without a `Content-Length` (411) and Done
+  requests over 64 KB, so a link holder cannot stream unbounded data into
+  the server's temporary storage.
+- `move_page_to_space` and `duplicate_page` into another space ask the person
+  first, like `trash_page`: both widen who can read the page, which text in a
+  page could otherwise talk a model into.
+- A client that declares MCP elicitation but fails to ask no longer gets the
+  change made anyway. The request state of a 2026-07-28 confirmation is an
+  HMAC of the grant, the tool, its arguments and the question.
+- Removing an email from `ALLOWED_EMAILS` now takes effect at once for that
+  member's tokens, refresh tokens, web session and links, not only at the
+  next sign-in.
+- Revoking a grant ends the download and upload links it made. Upload links
+  made before this release stop working.
+- `restore_page` checks `ALLOWED_SPACES` before restoring, not after.
+- Docmost below 0.80.1 is refused, at sign-in and on every tool call. Older
+  releases let `replace_page_json` store `javascript:` URLs in attachment
+  nodes (CVE-2026-34212, fixed in 0.71.0) and `export_page` pull restricted
+  attachments in by a forged id (CVE-2026-48073, fixed in 0.80.1).
+- An email outside `ALLOWED_EMAILS` is refused after the Docmost sign-in
+  with the same error as a wrong password, so the answer and its timing no
+  longer tell which emails are allowed.
+- Files sent to upload links get their type from the file extension, not
+  from the browser or the model. HTML, JavaScript, XML and Flash are stored
+  as downloads, so a file cannot run as a page on the Docmost domain.
+
+### Upgrade notes
+
+- If you set `FORWARDED_ALLOW_IPS=*` yourself, replace it with the address of
+  your reverse proxy, and make nginx send `X-Forwarded-For $remote_addr`.
+- Docmost 0.80.1 or newer is required. Upgrade Docmost first: on an older
+  Docmost, members who are already signed in get an error on every tool call.
+- Personal tokens created from now on expire after 90 days unless another
+  lifetime is picked. Scripts that need a lasting token should pick "never"
+  and keep the token safe.
+
 ## [1.2.0] - 2026-10-26
 
 ### Added

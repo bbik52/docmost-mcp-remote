@@ -48,13 +48,23 @@ async def test_wrong_password_is_generic(engine: AsyncEngine) -> None:
         await members.sign_in("anna@example.com", "wrong")
 
 
-async def test_allowlist_refuses_without_calling_docmost(engine: AsyncEngine) -> None:
+async def test_allowlist_refuses_like_a_wrong_password(engine: AsyncEngine) -> None:
     mock = Recorder(docmost_routes())
     members = service(engine, mock, allowed_emails="bob@example.com")
 
     with pytest.raises(SignInError, match=GENERIC_SIGN_IN_ERROR):
         await members.sign_in("anna@example.com", "pw")
-    assert mock.requests == []
+    # Docmost was asked, as for any email, and nothing was stored.
+    assert any(request.url.path == "/api/auth/login" for request in mock.requests)
+    async with engine.connect() as connection:
+        assert (await connection.execute(select(docmost_sessions))).first() is None
+
+
+async def test_allowlist_checks_the_email_docmost_knows(engine: AsyncEngine) -> None:
+    members = service(engine, Recorder(docmost_routes()), allowed_emails="anna@example.com")
+    # Typed differently, but Docmost signs in the allowed member.
+    member = await members.sign_in("  ANNA@example.com ", "pw")
+    assert member.email == "anna@example.com"
 
 
 async def test_old_docmost_is_refused(engine: AsyncEngine) -> None:
@@ -142,3 +152,10 @@ async def test_unknown_member_must_sign_in(engine: AsyncEngine) -> None:
     members = service(engine, Recorder({"/api/users/me": ok({})}))
     with pytest.raises(SessionExpiredError):
         await members.run(uuid.uuid4(), whoami)
+
+
+async def test_allowlist_applies_to_signed_in_members(engine: AsyncEngine) -> None:
+    mock = Recorder(docmost_routes())
+    member = await service(engine, mock).sign_in("anna@example.com", "pw")
+    with pytest.raises(SessionExpiredError, match="no longer use this server"):
+        await service(engine, mock, allowed_emails="bob@example.com").run(member.id, whoami)

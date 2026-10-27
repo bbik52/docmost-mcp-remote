@@ -10,7 +10,7 @@ A self-hosted remote [MCP](https://modelcontextprotocol.io) server for [Docmost]
 [![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
-[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#supported-docmost-versions)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.80.1%2B-6d28d9)](#supported-docmost-versions)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.bbik52/docmost-mcp-remote)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/bbik52/docmost-mcp-remote/blob/master/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/bbik52/docmost-mcp-remote?style=flat&logo=github&label=stars)](https://github.com/bbik52/docmost-mcp-remote/stargazers)
@@ -53,7 +53,7 @@ see and every change in Docmost carries their name.
   drop files in the browser, put them in order, and they land in the right
   place of the page.
 - 🐳 **Easy to host.** One container plus Postgres with a ready
-  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.70 to 0.97.
+  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.97.
 
 > ⭐ **If this server is useful to you, please [star the repository](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > It helps other Docmost users find it and tells us the work is worth continuing.
@@ -180,8 +180,9 @@ services:
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
-      # The port is published on 127.0.0.1 only, so every client is a local proxy.
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Proxies on loopback or a private network; the client address is the last
+      # untrusted one in X-Forwarded-For, so a header sent by the client is ignored.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "127.0.0.1:8000:8000"
@@ -252,7 +253,7 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -262,10 +263,12 @@ server {
 
 </details>
 
-The server uses `X-Forwarded-For` for its per-IP rate limits. The compose
-file publishes the port on 127.0.0.1 only and trusts the header from every
-client; if you publish the port elsewhere, set `FORWARDED_ALLOW_IPS` to the
-proxy's address.
+The server uses `X-Forwarded-For` for its per-IP rate limits. The proxy must
+set the header to the address it sees, not pass on what the client sent: the
+nginx example above does that with `$remote_addr`, and Caddy and Traefik do it
+by default. The compose file trusts proxies on loopback and private networks
+(`FORWARDED_ALLOW_IPS`); if your proxy reaches the server from a public
+address, set it to that address.
 
 
 <a id="connecting-a-client"></a>
@@ -332,6 +335,8 @@ Then run `/mcp` in Claude Code to sign in.
 
 1. Open `PUBLIC_URL/login` and sign in with your Docmost email and password.
 2. On the account page, create a personal token with the scopes you need.
+   It expires after 90 days unless you pick another lifetime (7 days to a
+   year, or never).
 3. Configure the client with the endpoint and the header
    `Authorization: Bearer <token>`:
 
@@ -491,11 +496,13 @@ profile: people join through an invitation and set their own password.
   error if Docmost did not apply it (this happens when Docmost runs with
   `COLLAB_DISABLE_REDIS`).
 - **Confirmation.** Risky changes ask you first, in your client, where the
-  client supports it (MCP elicitation): moving a page to the Trash, giving
-  people or groups a role in a space, inviting people, changing a workspace
-  role and deactivating someone. The question goes to you, not to the model,
-  so text in a page cannot answer it. Clients that cannot ask make these
-  changes without the question, within the scopes you granted.
+  client supports it (MCP elicitation): moving a page to the Trash, moving or
+  copying a page to another space, giving people or groups a role in a space,
+  inviting people, changing a workspace role and deactivating someone. The
+  question goes to you, not to the model, so text in a page cannot answer it.
+  If the client says it can ask but the question fails, nothing changes.
+  Clients that cannot ask make these changes without the question, within the
+  scopes you granted.
 - **Busy pages.** A change that rewrites the whole body (a replace, a section,
   a JSON write, a restore) is refused while someone else is editing the page,
   that is when another person saved it in the last minute, because their
@@ -553,9 +560,11 @@ connection is allowed to use. Resource reads count against
 
 ## 📦 Supported Docmost versions
 
-Docmost Community Edition **0.70.0 or newer**. Older versions are refused at
-sign-in. CI runs the integration tests against Docmost 0.70.3, 0.96.0 and
-0.97.0; newer releases work in most cases and log a warning until they are
+Docmost Community Edition **0.80.1 or newer**. Older versions are refused at
+sign-in and on every tool call: they have published security advisories that
+the endpoints this server calls expose (CVE-2026-34212, fixed in 0.71.0, and
+CVE-2026-48073, fixed in 0.80.1). CI runs the integration tests against
+Docmost 0.80.1, 0.96.0 and 0.97.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
 password. Labels and backlinks need Docmost 0.90 or newer, and the
@@ -570,8 +579,10 @@ Members sign in with their own Docmost account; everything a client does is
 done as that member, with their Docmost rights. The server keeps the Docmost
 session token encrypted with a key derived from `SECRET_KEY` and does not
 store passwords unless `RELOGIN_MODE=stored_password`. Personal tokens are
-stored as hashes and shown once. The sign-in page has CSRF protection and
-per-IP and per-email rate limits.
+stored as hashes, shown once and expire after 90 days by default. The
+sign-in page has CSRF protection and per-IP and per-email rate limits, and
+"Sign out everywhere" on the account page ends its sessions in every
+browser.
 
 The server is its own OAuth 2.1 authorization server, following the MCP
 authorization spec: dynamic client registration (limited per IP, redirect
@@ -582,7 +593,9 @@ that rotate on every use. A reused refresh token or a replayed code revokes
 the whole grant. OAuth grants and personal tokens are listed and revoked on
 the same account page.
 
-Page content is treated as untrusted data and labelled as such for the model.
+Page content is treated as untrusted data and labelled as such for the model;
+titles and names, which are returned as plain fields, lose hidden and control
+characters and are cut at 300 characters.
 Prompt injection in a page can still make a client act within the scopes the
 member granted, so grant `write`, `delete` and `admin` only to clients you trust.
 Tool calls and resource reads are limited per member and recorded in an
@@ -681,7 +694,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `RELOGIN_MODE` | no | `ask` | `ask`: members sign in again when their Docmost session expires; `stored_password`: the password is kept encrypted and used to sign in again |
 | `DOCMOST_TIMEOUT_SECONDS` | no | `15` | Timeout for one request to Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | no | `5242880` | Largest Docmost response the server reads |
-| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (`*` in the compose file) |
+| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1` | Proxies trusted for `X-Forwarded-For` (loopback and private networks in the compose file) |
 | `HOST` / `PORT` | no | `0.0.0.0` / `8000` | Listen address |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warning` or `error` |
 | `IMAGE_TAG` | no | `1` | Image tag used by `compose.yaml` |

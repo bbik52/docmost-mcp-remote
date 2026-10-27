@@ -55,6 +55,11 @@ def main() -> None:
     # Request lines of the HTTP client add noise and are not needed to operate the server.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logger.info("Starting docmost-mcp-remote %s", __version__)
+    if settings.forwarded_allow_ips.strip() == "*":
+        logger.warning(
+            "FORWARDED_ALLOW_IPS=* lets clients choose the address used for rate limits; "
+            "set it to the address of your reverse proxy"
+        )
     if settings.docmost_url_is_insecure:
         logger.warning("DOCMOST_URL uses http: Docmost credentials and tokens travel unencrypted")
 
