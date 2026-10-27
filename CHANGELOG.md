@@ -7,6 +7,14 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Fixed
+
+- Cursor still could not finish signing in: its https callback redirects
+  again, and browsers check the consent page's `form-action` at every
+  redirect after the form post, so the answer was blocked. Every app now gets
+  the answer on a page that opens its callback, and the consent page allows
+  form posts to this server only.
+
 ## [1.2.2] - 2026-10-27
 
 ### Fixed
