@@ -8,7 +8,6 @@ framed.
 from __future__ import annotations
 
 import logging
-import re
 import secrets
 import time
 import uuid
@@ -42,18 +41,17 @@ _LOGIN_COOKIE_AGE = 60 * 60
 _TOKEN_LIFETIMES = {"7": 7, "30": 30, "90": 90, "365": 365, "never": 0}
 _DEFAULT_TOKEN_DAYS = 90
 _CSP = (
-    "default-src 'none'; style-src 'self'; form-action {form_action}; "
+    "default-src 'none'; style-src 'self'; form-action 'self'; "
     "frame-ancestors 'none'; base-uri 'none'"
 )
 _SECURITY_HEADERS = {
     "Cache-Control": "no-store",
-    "Content-Security-Policy": _CSP.format(form_action="'self'"),
+    "Content-Security-Policy": _CSP,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
 _STYLE = files("docmost_mcp_remote.web").joinpath("style.css").read_text()
-_CSP_SOURCE = re.compile(r"[a-z][a-z0-9+.-]*:(//[A-Za-z0-9.\[\]:-]+)?")
 _TOO_MANY = "Too many sign-in attempts. Wait a few minutes and try again."
 _EXPIRED_REQUEST = (
     "This authorization request has expired or was already answered. "
@@ -66,23 +64,6 @@ def safe_next(value: str | None) -> str:
     if value and value.startswith("/") and not value.startswith(("//", "/\\")):
         return value
     return "/account"
-
-
-def _redirect_source(uri: str) -> str:
-    """The CSP source that lets the consent form redirect to ``uri``.
-
-    Browsers apply ``form-action`` to the redirect that follows a form post.
-    """
-    parts = urlsplit(uri)
-    if parts.scheme in ("http", "https"):
-        host = parts.hostname or ""
-        if ":" in host:
-            host = f"[{host}]"
-        source = f"{parts.scheme}://{host}" + (f":{parts.port}" if parts.port else "")
-    else:
-        source = f"{parts.scheme}:"
-    # Anything else could inject directives into the policy.
-    return source if _CSP_SOURCE.fullmatch(source) else ""
 
 
 def _requested_scopes(client: OAuthClientInformationFull, params: AuthorizationParams) -> set[str]:
@@ -392,10 +373,8 @@ class WebPages:
             return self._message("Request expired", _EXPIRED_REQUEST, 400)
         client, params = pending
         redirect_uri = str(params.redirect_uri)
-        csp = _CSP.format(form_action=f"'self' {_redirect_source(redirect_uri)}")
         return self._render(
             "consent.html",
-            headers={"Content-Security-Policy": csp},
             member=member,
             client_name=(client.client_name or "An unnamed app")[:100],
             redirect_host=_redirect_host(redirect_uri),
@@ -464,15 +443,12 @@ class WebPages:
     ) -> Response:
         """Send the browser back to the app with the answer.
 
-        Web apps and loopback listeners get a plain redirect. Desktop apps with
-        their own scheme (``cursor://``) get a page that opens the link: some
-        browsers drop a redirect from a form post to such a scheme without a
-        word, which leaves the member on the consent page with a used request.
+        A page that opens ``location`` rather than a redirect from the form
+        post: browsers apply the consent page's ``form-action`` to every
+        redirect that follows the post, so an app whose callback redirects
+        again (Cursor's https callback opens ``cursor://``) was blocked, and
+        some browsers drop a redirect from a post to a custom scheme.
         """
-        if urlsplit(location).scheme in ("http", "https"):
-            return RedirectResponse(
-                location, status_code=303, headers={"Cache-Control": "no-store"}
-            )
         return self._render(
             "return.html",
             client_name=(client.client_name or "the app")[:100],
