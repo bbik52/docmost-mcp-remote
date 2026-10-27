@@ -142,3 +142,10 @@ async def test_unknown_member_must_sign_in(engine: AsyncEngine) -> None:
     members = service(engine, Recorder({"/api/users/me": ok({})}))
     with pytest.raises(SessionExpiredError):
         await members.run(uuid.uuid4(), whoami)
+
+
+async def test_allowlist_applies_to_signed_in_members(engine: AsyncEngine) -> None:
+    mock = Recorder(docmost_routes())
+    member = await service(engine, mock).sign_in("anna@example.com", "pw")
+    with pytest.raises(SessionExpiredError, match="no longer use this server"):
+        await service(engine, mock, allowed_emails="bob@example.com").run(member.id, whoami)

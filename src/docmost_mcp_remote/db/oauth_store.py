@@ -36,6 +36,7 @@ class StoredCode:
     resource: str | None
     expires_at: datetime
     used: bool
+    email: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,7 @@ class StoredToken:
     resource: str | None
     expires_at: datetime | None
     replaced: bool
+    email: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,8 +188,12 @@ class OAuthStore:
 
     async def load_code(self, code: str) -> StoredCode | None:
         query = (
-            select(oauth_codes, grants.c.member_id)
-            .select_from(oauth_codes.join(grants, oauth_codes.c.grant_id == grants.c.id))
+            select(oauth_codes, grants.c.member_id, members.c.email)
+            .select_from(
+                oauth_codes.join(grants, oauth_codes.c.grant_id == grants.c.id).join(
+                    members, grants.c.member_id == members.c.id
+                )
+            )
             .where(and_(oauth_codes.c.code_hash == hash_token(code), grants.c.revoked_at.is_(None)))
         )
         async with self.engine.connect() as connection:
@@ -205,6 +211,7 @@ class OAuthStore:
             resource=row.resource,
             expires_at=row.expires_at,
             used=row.used_at is not None,
+            email=row.email,
         )
 
     async def use_code(self, code: str) -> bool:
@@ -276,6 +283,7 @@ class OAuthStore:
                 grants.c.member_id,
                 grants.c.client_id,
                 grants.c.scopes,
+                members.c.email,
             )
             .select_from(
                 tokens.join(grants, tokens.c.grant_id == grants.c.id).join(
@@ -306,6 +314,7 @@ class OAuthStore:
             resource=row.resource,
             expires_at=row.expires_at,
             replaced=row.replaced_at is not None,
+            email=row.email,
         )
 
     async def replace_refresh_token(self, token: str) -> bool:

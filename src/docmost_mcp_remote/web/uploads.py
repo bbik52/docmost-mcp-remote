@@ -125,12 +125,18 @@ class UploadLinks:
         )
 
     async def create(
-        self, member_id: uuid.UUID, page: Page, page_url: str | None, placement: Placement
+        self,
+        member_id: uuid.UUID,
+        grant_id: uuid.UUID,
+        page: Page,
+        page_url: str | None,
+        placement: Placement,
     ) -> dict[str, Any]:
-        """A new link to ``page``, as tool result fields."""
+        """A new link to ``page``, as tool result fields; it ends if ``grant_id`` is revoked."""
         token = secrets.token_urlsafe(32)
         link = await self._store.create(
             member_id=member_id,
+            grant_id=grant_id,
             token=token,
             page_id=page.id,
             details={

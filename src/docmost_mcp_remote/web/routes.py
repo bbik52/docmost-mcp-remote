@@ -27,7 +27,7 @@ from starlette.routing import Route
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.crypto import constant_time_equal, derive_key
 from docmost_mcp_remote.db.oauth_store import OAuthStore
-from docmost_mcp_remote.db.store import Store
+from docmost_mcp_remote.db.store import Member, Store
 from docmost_mcp_remote.members import MemberService, SignInError
 from docmost_mcp_remote.oauth import CODE_TTL, CONSENT_PATH
 from docmost_mcp_remote.ratelimit import RateLimiter
@@ -171,6 +171,18 @@ class WebPages:
     def _web_session(self, request: Request) -> dict[str, Any] | None:
         return self._read_cookie(request, self._session_cookie, self._session_age)
 
+    async def _active_member(self, session: dict[str, Any]) -> Member | None:
+        """The member of a web session, unless gone, disabled or no longer allowed."""
+        member_id = uuid.UUID(session["m"])
+        member = await self._store.get_member(member_id)
+        if (
+            member is None
+            or await self._store.member_disabled(member_id)
+            or not self._settings.email_allowed(member.email)
+        ):
+            return None
+        return member
+
     @staticmethod
     def _csrf_ok(form: FormData, expected: str | None) -> bool:
         submitted = form.get("csrf")
@@ -261,10 +273,10 @@ class WebPages:
         error: str | None = None,
         status: int = 200,
     ) -> Response:
-        member_id = uuid.UUID(session["m"])
-        member = await self._store.get_member(member_id)
-        if member is None or await self._store.member_disabled(member_id):
+        member = await self._active_member(session)
+        if member is None:
             return RedirectResponse("/login", status_code=303)
+        member_id = member.id
         return self._render(
             "account.html",
             status=status,
@@ -285,6 +297,8 @@ class WebPages:
     async def create_token(self, request: Request) -> Response:
         session = self._web_session(request)
         if session is None:
+            return RedirectResponse("/login", status_code=303)
+        if await self._active_member(session) is None:
             return RedirectResponse("/login", status_code=303)
         form = await request.form()
         if not self._csrf_ok(form, session.get("c")):
@@ -342,9 +356,8 @@ class WebPages:
         if session is None:
             next_path = f"{CONSENT_PATH}?request={quote(request_id, safe='')}"
             return RedirectResponse(f"/login?next={quote(next_path, safe='')}", status_code=303)
-        member_id = uuid.UUID(session["m"])
-        member = await self._store.get_member(member_id)
-        if member is None or await self._store.member_disabled(member_id):
+        member = await self._active_member(session)
+        if member is None:
             return RedirectResponse("/login", status_code=303)
         pending = await self._pending_request(request_id)
         if pending is None:
@@ -377,9 +390,10 @@ class WebPages:
         # Deleting the request makes every answer single use.
         if pending is None or not await self._oauth.delete_request(request_id):
             return self._message("Request expired", _EXPIRED_REQUEST, 400)
-        member_id = uuid.UUID(session["m"])
-        if await self._store.member_disabled(member_id):
+        member = await self._active_member(session)
+        if member is None:
             return RedirectResponse("/login", status_code=303)
+        member_id = member.id
         client, params = pending
         redirect_uri = str(params.redirect_uri)
         if form.get("action") != "approve":

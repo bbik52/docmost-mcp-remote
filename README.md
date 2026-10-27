@@ -494,11 +494,13 @@ profile: people join through an invitation and set their own password.
   error if Docmost did not apply it (this happens when Docmost runs with
   `COLLAB_DISABLE_REDIS`).
 - **Confirmation.** Risky changes ask you first, in your client, where the
-  client supports it (MCP elicitation): moving a page to the Trash, giving
-  people or groups a role in a space, inviting people, changing a workspace
-  role and deactivating someone. The question goes to you, not to the model,
-  so text in a page cannot answer it. Clients that cannot ask make these
-  changes without the question, within the scopes you granted.
+  client supports it (MCP elicitation): moving a page to the Trash, moving or
+  copying a page to another space, giving people or groups a role in a space,
+  inviting people, changing a workspace role and deactivating someone. The
+  question goes to you, not to the model, so text in a page cannot answer it.
+  If the client says it can ask but the question fails, nothing changes.
+  Clients that cannot ask make these changes without the question, within the
+  scopes you granted.
 - **Busy pages.** A change that rewrites the whole body (a replace, a section,
   a JSON write, a restore) is refused while someone else is editing the page,
   that is when another person saved it in the last minute, because their

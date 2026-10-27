@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -11,10 +12,13 @@ from typing import Any
 import httpx
 import pytest
 from fastmcp.exceptions import ToolError
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from docmost_mcp_remote.db.engine import create_engine
 from docmost_mcp_remote.tools.files import single_page
 from docmost_mcp_remote.web import downloads
+from tests.conftest import DATABASE_TEST_URL
 from tests.fakes import error, ok
 from tests.harness import RunningServer
 from tests.test_write_tools import FakeDocmost
@@ -220,3 +224,24 @@ def test_single_page_from_an_old_docmost_zip() -> None:
     old = _zip(Guide_md=b"# Guide", metadata_json=b"{}")
     assert single_page(old, "Guide.zip") == (b"# Guide", "Guide.md")
     assert single_page(_zip(Guide_md=b"a", Child_md=b"b"), "Guide.zip") is None
+
+
+def test_links_end_with_their_grant(server: RunningServer, token: str) -> None:
+    download = server.call(token, "export_space", {"space_id": "s1"})["download_url"]
+    upload = server.call(token, "create_upload_link", {"page": "p1"})["upload_url"]
+    upload = upload.replace(server.public_url, server.url)
+    assert _get(server, download).status_code == 200
+    assert httpx.get(upload).status_code == 200
+
+    async def revoke() -> None:
+        engine = create_engine(DATABASE_TEST_URL)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text("UPDATE grants SET revoked_at = now()"))
+        finally:
+            await engine.dispose()
+
+    asyncio.run(revoke())
+    assert _get(server, download).status_code == 404
+    assert httpx.get(upload).status_code == 404
+    assert httpx.post(f"{upload}/done").status_code == 404

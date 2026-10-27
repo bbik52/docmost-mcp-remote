@@ -162,6 +162,9 @@ class MemberService:
         """Run ``action`` with the member's Docmost session, handling session expiry."""
         if await self._store.member_disabled(member_id):
             raise SessionExpiredError("This account is disabled on this server.")
+        member = await self._store.get_member(member_id)
+        if member is None or not self._settings.email_allowed(member.email):
+            raise SessionExpiredError("This account may no longer use this server.")
         token = await self._token(member_id)
         try:
             return await action(self._docmost.session(token))

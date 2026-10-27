@@ -218,8 +218,17 @@ async def test_cleanup_deletes_expired_links(engine: AsyncEngine) -> None:
             )
         )
         member_id = member.scalar_one()
+        grant = await connection.execute(
+            text(
+                "INSERT INTO grants (id, member_id, kind, name, scopes) "
+                "VALUES (gen_random_uuid(), :member, 'personal', 'x', 'write') RETURNING id"
+            ),
+            {"member": member_id},
+        )
+        grant_id = grant.scalar_one()
     kept = await store.create(
         member_id=member_id,
+        grant_id=grant_id,
         token="kept",
         page_id="p1",
         details={},
@@ -227,6 +236,7 @@ async def test_cleanup_deletes_expired_links(engine: AsyncEngine) -> None:
     )
     gone = await store.create(
         member_id=member_id,
+        grant_id=grant_id,
         token="gone",
         page_id="p1",
         details={},
