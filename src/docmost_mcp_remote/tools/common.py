@@ -11,7 +11,7 @@ from fastmcp.exceptions import ToolError
 from docmost_mcp_remote.auth import current_member_id
 from docmost_mcp_remote.docmost import DocmostBackend, DocmostError
 from docmost_mcp_remote.docmost.models import Label, Page
-from docmost_mcp_remote.docmost.version import Version
+from docmost_mcp_remote.docmost.version import MIN_SUPPORTED, Version
 from docmost_mcp_remote.members import MemberService, SessionExpiredError
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,18 @@ logger = logging.getLogger(__name__)
 async def as_member[T](
     members: MemberService, action: Callable[[DocmostBackend], Awaitable[T]]
 ) -> T:
-    """Run ``action`` in Docmost as the requesting member; errors become tool errors."""
+    """Run ``action`` in Docmost as the requesting member; errors become tool errors.
+
+    A Docmost older than the supported minimum is refused here too, not only at
+    sign-in, so sessions made before Docmost was found too old stop working.
+    """
+
+    async def checked(backend: DocmostBackend) -> T:
+        await require_version(backend, MIN_SUPPORTED)
+        return await action(backend)
+
     try:
-        return await members.run(current_member_id(), action)
+        return await members.run(current_member_id(), checked)
     except SessionExpiredError as exc:
         raise ToolError(str(exc)) from None
     except DocmostError as exc:

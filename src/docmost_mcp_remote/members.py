@@ -48,9 +48,6 @@ class MemberService:
         email = email.strip()
         if not email or not password:
             raise SignInError(GENERIC_SIGN_IN_ERROR)
-        if not self._settings.email_allowed(email):
-            # Same message as a wrong password: the allowlist is not revealed.
-            raise SignInError(GENERIC_SIGN_IN_ERROR)
         try:
             token = await self._docmost.login(email, password)
             session = self._docmost.session(token)
@@ -69,6 +66,11 @@ class MemberService:
         except DocmostError as exc:
             logger.warning("Sign-in failed: %s", exc)
             raise SignInError(GENERIC_SIGN_IN_ERROR) from None
+        # Checked after Docmost answered, against the email Docmost knows, with the
+        # message of a wrong password: neither the answer nor its timing tells
+        # whether an email is on the allowlist.
+        if not self._settings.email_allowed(user.email):
+            raise SignInError(GENERIC_SIGN_IN_ERROR)
         if check.version is None:
             logger.warning(
                 "Docmost did not report its version (its version check against GitHub "

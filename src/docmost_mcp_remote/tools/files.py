@@ -391,7 +391,11 @@ def register(
             Field(max_length=(MAX_UPLOAD_BYTES * 4) // 3 + 4, description="The file, base64."),
         ],
         mime_type: Annotated[
-            str | None, Field(description="Guessed from the file name when left out.")
+            str | None,
+            Field(
+                description="Type of the file; only used when the file name has no known "
+                "extension. Pages and scripts (HTML, JavaScript, XML) are stored as downloads."
+            ),
         ] = None,
         add_to_page: Annotated[
             bool, Field(description="Also show the file in the page body; false only attaches it.")

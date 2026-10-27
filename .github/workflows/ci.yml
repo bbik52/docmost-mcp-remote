@@ -76,7 +76,7 @@ jobs:
       matrix:
         # Oldest supported, previous and newest tested release. "latest" warns early
         # when a new Docmost release is out and the tested range needs a bump.
-        docmost: ["0.70.3", "0.96.0", "0.97.0"]
+        docmost: ["0.80.1", "0.96.0", "0.97.0"]
         canary: [false]
         include:
           - docmost: latest

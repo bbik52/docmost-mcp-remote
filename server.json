@@ -34,7 +34,7 @@
         },
         {
           "name": "DOCMOST_URL",
-          "description": "Base URL of your Docmost, Community Edition 0.70.0 or newer",
+          "description": "Base URL of your Docmost, Community Edition 0.80.1 or newer",
           "isRequired": true
         },
         {
@@ -70,7 +70,7 @@
         },
         {
           "name": "DOCMOST_URL",
-          "description": "Base URL of your Docmost, Community Edition 0.70.0 or newer",
+          "description": "Base URL of your Docmost, Community Edition 0.80.1 or newer",
           "isRequired": true
         },
         {

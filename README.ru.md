@@ -10,7 +10,7 @@
 [![PyPI](https://img.shields.io/pypi/v/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Python](https://img.shields.io/pypi/pyversions/docmost-mcp-remote)](https://pypi.org/project/docmost-mcp-remote/)
 [![Container](https://img.shields.io/badge/ghcr.io-docmost--mcp--remote-blue?logo=docker&logoColor=white)](https://github.com/bbik52/docmost-mcp-remote/pkgs/container/docmost-mcp-remote)
-[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.70%2B-6d28d9)](#supported-docmost-versions)
+[![Docmost](https://img.shields.io/badge/Docmost%20CE-0.80.1%2B-6d28d9)](#supported-docmost-versions)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.bbik52/docmost-mcp-remote)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/bbik52/docmost-mcp-remote?style=flat&logo=github&label=stars)](https://github.com/bbik52/docmost-mcp-remote/stargazers)
@@ -52,7 +52,7 @@
   перетащите файлы в браузере, расставьте по порядку, и они попадут в нужное
   место страницы.
 - 🐳 **Легко развернуть.** Один контейнер и Postgres с готовым `compose.yaml`
-  или `pip install`. CI проверяет работу с Docmost от 0.70 до 0.97.
+  или `pip install`. CI проверяет работу с Docmost от 0.80.1 до 0.97.
 
 > ⭐ **Если сервер вам пригодился, пожалуйста, [поставьте звезду репозиторию](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > Так его проще найти другим пользователям Docmost, а нам понятно, что работа нужна.
@@ -559,8 +559,11 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 
 ## 📦 Поддерживаемые версии Docmost
 
-Docmost Community Edition **0.70.0 и новее**. Более старые версии
-отклоняются при входе. CI прогоняет интеграционные тесты на Docmost 0.70.3,
+Docmost Community Edition **0.80.1 и новее**. Более старые версии
+отклоняются при входе и при каждом вызове инструмента: в них есть
+опубликованные уязвимости, доступные через методы, которые вызывает этот
+сервер (CVE-2026-34212, исправлена в 0.71.0, и CVE-2026-48073, исправлена в
+0.80.1). CI прогоняет интеграционные тесты на Docmost 0.80.1,
 0.96.0 и 0.97.0; более новые релизы в большинстве случаев работают и пишут в
 лог предупреждение, пока их не добавят в проверяемый диапазон. Пользователи,
 которые входят в Docmost только через SSO (функция Enterprise), не смогут

@@ -184,3 +184,19 @@ def test_missing_endpoint_is_explained(engine: AsyncEngine) -> None:
         token = server.token()
         with pytest.raises(ToolError, match="does not offer this"):
             server.call(token, "list_backlinks", {"page": "p1"})
+
+
+def test_docmost_below_the_minimum_is_refused(engine: AsyncEngine) -> None:
+    # Members who signed in before Docmost was found too old are refused too.
+    docmost = LabelledDocmost()
+    with RunningServer(docmost.recorder.client()) as server:
+        token = server.token(scopes=("write",))
+        docmost.recorder.routes["/api/version"] = ok({"currentVersion": "0.80.0"})
+        for tool, arguments in (
+            ("search", {"query": "x"}),
+            ("get_page", {"page": "p1"}),
+        ):
+            with pytest.raises(
+                ToolError, match=r"0\.80\.0 is not supported; version 0\.80\.1 or newer"
+            ):
+                server.call(token, tool, arguments)

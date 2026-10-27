@@ -236,7 +236,7 @@ async def test_create_comment_sends_prosemirror_json() -> None:
 
 
 @pytest.mark.parametrize(
-    ("version", "tested"), [("0.70.0", True), ("0.97.0", True), ("0.99.1", False)]
+    ("version", "tested"), [("0.80.1", True), ("0.97.0", True), ("0.99.1", False)]
 )
 async def test_version_supported(version: str, tested: bool) -> None:
     mock = Recorder({"/api/version": ok({"currentVersion": version})})
@@ -255,8 +255,8 @@ async def test_version_not_reported(body: dict[str, str] | None) -> None:
 
 
 async def test_version_too_old() -> None:
-    mock = Recorder({"/api/version": ok({"currentVersion": "0.25.3"})})
-    with pytest.raises(UnsupportedDocmostVersionError, match=r"0\.70\.0 or newer"):
+    mock = Recorder({"/api/version": ok({"currentVersion": "0.80.0"})})
+    with pytest.raises(UnsupportedDocmostVersionError, match=r"0\.80\.1 or newer"):
         await mock.client().session("t").version()
 
 
