@@ -8,11 +8,11 @@
     "url": "https://github.com/bbik52/docmost-mcp-remote",
     "source": "github"
   },
-  "version": "1.2.0",
+  "version": "1.2.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/bbik52/docmost-mcp-remote:1.2.0",
+      "identifier": "ghcr.io/bbik52/docmost-mcp-remote:1.2.1",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {
@@ -55,7 +55,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "docmost-mcp-remote",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "streamable-http",
