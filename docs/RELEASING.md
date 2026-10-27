@@ -30,11 +30,17 @@ Release artifacts are not signed yet (ADR 0006).
   as described in DESIGN.md, "Contributions and project security".
 - **Glama**: claim the server on <https://glama.ai/mcp/servers> with the
   GitHub account named in `glama.json`. In its admin Dockerfile settings use
-  Python 3.13, the build steps `["pip install ."]` and the CMD arguments
+  the build steps
+  `["uv pip install --python /usr/local/bin/python --break-system-packages ."]`
+  and the CMD arguments
   `["python", "-m", "docmost_mcp_remote", "--tool-catalog"]`, with no
-  environment variables (Glama refuses a command containing `mcp-remote`,
-  mistaking it for the npm proxy of that name):
-  the catalog mode lists the tools without Docmost or a database.
+  environment variables. Glama's image links a uv-managed Python to
+  `/usr/local/bin/python`; it has no `pip`, is marked as externally managed,
+  and `uv pip --system` may pick another interpreter, hence the explicit
+  `--python` and the flag. Glama
+  also refuses a command containing `mcp-remote`, mistaking it for the npm
+  proxy of that name. The catalog mode lists the tools without Docmost or a
+  database.
 
 ## Cutting a release
 
