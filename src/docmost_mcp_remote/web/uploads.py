@@ -49,6 +49,8 @@ logger = logging.getLogger(__name__)
 UPLOAD_PATH = "/uploads/{token}"
 #: Most files one link takes.
 MAX_FILES = 50
+#: Largest body of a Done request, which only carries the order of the files.
+MAX_DONE_BYTES = 64 * 1024
 _SCRIPT = package_files("docmost_mcp_remote.web").joinpath("upload.js").read_text()
 _CSP = (
     "default-src 'none'; style-src 'self'; script-src 'self'; img-src blob:; "
@@ -215,8 +217,12 @@ class UploadLinks:
             return _error(_GONE, 404)
         if link.state != "open":
             return _error("The files of this link were already added to the page.", 409)
+        # The declared length bounds what is read: the HTTP server never reads past
+        # it, while a chunked body could go on without end.
         declared = request.headers.get("content-length", "")
-        if declared.isdigit() and int(declared) > self.max_bytes + 1024 * 1024:
+        if not declared.isdigit() or "transfer-encoding" in request.headers:
+            return _error("Send the files with a Content-Length header.", 411)
+        if int(declared) > self.max_bytes + 1024 * 1024:
             return _error(f"The files may be {self.max_bytes // (1024 * 1024)} MB in total.", 413)
         try:
             form = await request.form(max_files=MAX_FILES, max_fields=10)
@@ -264,7 +270,9 @@ class UploadLinks:
         if link is None:
             return _error(_GONE, 404)
         order: list[uuid.UUID] = []
-        body = await request.body()
+        body = await _read_limited(request, MAX_DONE_BYTES)
+        if body is None:
+            return _error("The request is too large.", 413)
         if body:
             try:
                 wanted = json.loads(body).get("order") or []
@@ -364,6 +372,19 @@ class UploadLinks:
         except DocmostError as exc:
             logger.warning("Upload link %s: Docmost refused the files: %s", link.id, exc)
             raise _Failed(f"Docmost refused the files: {exc}", 502) from None
+
+
+async def _read_limited(request: Request, limit: int) -> bytes | None:
+    """The request body, or None when it is longer than ``limit`` bytes."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            return None
+    return bytes(body)
 
 
 class _Failed(Exception):

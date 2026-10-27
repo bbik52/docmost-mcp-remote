@@ -7,6 +7,26 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Security
+
+- The client address used for rate limits can no longer be chosen by the
+  client: the compose file trusts `X-Forwarded-For` only from proxies on
+  loopback and private networks instead of from everyone, the nginx example
+  overwrites the header, and the server warns at startup about
+  `FORWARDED_ALLOW_IPS=*`.
+- Dynamic client registration can no longer be locked by filling it: only
+  clients without a grant count against the limit of 1000, the oldest of them
+  whose consent request has expired make room for new ones, and unused
+  clients are deleted after an hour instead of a day.
+- Upload links refuse bodies without a `Content-Length` (411) and Done
+  requests over 64 KB, so a link holder cannot stream unbounded data into
+  the server's temporary storage.
+
+### Upgrade notes
+
+- If you set `FORWARDED_ALLOW_IPS=*` yourself, replace it with the address of
+  your reverse proxy, and make nginx send `X-Forwarded-For $remote_addr`.
+
 ## [1.2.0] - 2026-10-26
 
 ### Added

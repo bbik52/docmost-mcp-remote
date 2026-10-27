@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy import ColumnElement, and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from docmost_mcp_remote.crypto import hash_token, new_token
@@ -21,7 +21,7 @@ from docmost_mcp_remote.db.schema import (
 from docmost_mcp_remote.db.store import now
 
 #: Registered clients that never got a grant are deleted after this time.
-UNUSED_CLIENT_TTL = timedelta(days=1)
+UNUSED_CLIENT_TTL = timedelta(hours=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +58,10 @@ class IssuedTokens:
     refresh_expires_at: datetime
 
 
+def _unused_client() -> ColumnElement[bool]:
+    return ~select(grants.c.id).where(grants.c.client_id == oauth_clients.c.client_id).exists()
+
+
 class OAuthStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
@@ -76,11 +80,29 @@ class OAuthStore:
                 select(oauth_clients.c.info).where(oauth_clients.c.client_id == client_id)
             )
 
-    async def count_clients(self) -> int:
+    async def count_unused_clients(self) -> int:
+        """Registered clients that never got a grant."""
         async with self.engine.connect() as connection:
             return int(
-                await connection.scalar(select(func.count()).select_from(oauth_clients)) or 0
+                await connection.scalar(
+                    select(func.count()).select_from(oauth_clients).where(_unused_client())
+                )
+                or 0
             )
+
+    async def evict_unused_clients(self, count: int, older_than: timedelta) -> int:
+        """Delete up to ``count`` of the oldest unused clients registered before ``older_than``."""
+        oldest = (
+            select(oauth_clients.c.client_id)
+            .where(and_(_unused_client(), oauth_clients.c.created_at < now() - older_than))
+            .order_by(oauth_clients.c.created_at)
+            .limit(count)
+        )
+        async with self.engine.begin() as connection:
+            result = await connection.execute(
+                delete(oauth_clients).where(oauth_clients.c.client_id.in_(oldest.scalar_subquery()))
+            )
+        return int(result.rowcount or 0)
 
     # Pending authorization requests
 
@@ -314,9 +336,7 @@ class OAuthStore:
                 delete(oauth_clients).where(
                     and_(
                         oauth_clients.c.created_at < current - UNUSED_CLIENT_TTL,
-                        ~select(grants.c.id)
-                        .where(grants.c.client_id == oauth_clients.c.client_id)
-                        .exists(),
+                        _unused_client(),
                     )
                 )
             )

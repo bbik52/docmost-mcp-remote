@@ -14,7 +14,9 @@ import httpx
 import pytest
 from fastmcp import Client
 from fastmcp.client.auth import OAuth
-from mcp.shared.auth import AuthorizationCodeResult
+from mcp.server.auth.provider import RegistrationError
+from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull
+from pydantic import AnyUrl
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -544,9 +546,71 @@ async def test_cleanup_removes_unused_clients(engine: AsyncEngine) -> None:
         await connection.execute(
             update(oauth_clients)
             .where(oauth_clients.c.client_id == "old")
-            .values(created_at=now() - timedelta(days=2))
+            .values(created_at=now() - timedelta(hours=2))
         )
     await oauth.cleanup()
     async with engine.connect() as connection:
         left = (await connection.execute(text("SELECT client_id FROM oauth_clients"))).scalars()
         assert list(left) == ["new"]
+
+
+def _client(client_id: str) -> OAuthClientInformationFull:
+    return OAuthClientInformationFull(
+        client_id=client_id,
+        redirect_uris=[AnyUrl(REDIRECT)],
+        token_endpoint_auth_method="none",
+    )
+
+
+async def _age_clients(engine: AsyncEngine, age: timedelta, *client_ids: str) -> None:
+    async with engine.begin() as connection:
+        await connection.execute(
+            update(oauth_clients)
+            .where(oauth_clients.c.client_id.in_(client_ids))
+            .values(created_at=now() - age)
+        )
+
+
+async def test_full_registry_makes_room_from_stale_unused_clients(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("docmost_mcp_remote.oauth.MAX_UNUSED_CLIENTS", 2)
+    oauth = OAuthStore(engine)
+    provider = DocmostOAuthProvider(make_settings(), Store(engine), oauth)
+    await provider.register_client(_client("flood-1"))
+    await provider.register_client(_client("flood-2"))
+    await _age_clients(engine, timedelta(minutes=30), "flood-1", "flood-2")
+    await provider.register_client(_client("real"))
+    assert await oauth.load_client("flood-1") is None
+    assert await oauth.load_client("flood-2") is not None
+    assert await oauth.load_client("real") is not None
+
+
+async def test_full_registry_keeps_fresh_and_used_clients(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("docmost_mcp_remote.oauth.MAX_UNUSED_CLIENTS", 1)
+    oauth = OAuthStore(engine)
+    provider = DocmostOAuthProvider(make_settings(), Store(engine), oauth)
+    store = Store(engine)
+    member = await store.upsert_member("user-1", "anna@example.com", "Anna")
+    await provider.register_client(_client("used"))
+    await oauth.create_grant_with_code(
+        member_id=member.id,
+        client_id="used",
+        client_name="Used",
+        scopes=frozenset({"read"}),
+        code_challenge="x" * 43,
+        redirect_uri=REDIRECT,
+        redirect_uri_provided_explicitly=True,
+        resource=None,
+        ttl=timedelta(minutes=5),
+    )
+    await _age_clients(engine, timedelta(days=2), "used")
+    # Clients with a grant do not count against the limit.
+    await provider.register_client(_client("pending"))
+    # A client whose consent request may still be open is never pushed out.
+    with pytest.raises(RegistrationError):
+        await provider.register_client(_client("flood"))
+    assert await oauth.load_client("used") is not None
+    assert await oauth.load_client("pending") is not None

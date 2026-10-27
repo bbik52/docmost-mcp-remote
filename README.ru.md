@@ -179,8 +179,9 @@ services:
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-50}
       TOOL_CALLS_PER_MINUTE: ${TOOL_CALLS_PER_MINUTE:-60}
       MAX_PAGE_CHARS: ${MAX_PAGE_CHARS:-60000}
-      # The port is published on 127.0.0.1 only, so every client is a local proxy.
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      # Proxies on loopback or a private network; the client address is the last
+      # untrusted one in X-Forwarded-For, so a header sent by the client is ignored.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "127.0.0.1:8000:8000"
@@ -251,7 +252,7 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -261,10 +262,12 @@ server {
 
 </details>
 
-Сервер использует `X-Forwarded-For` для ограничений частоты по IP. Файл
-compose публикует порт только на 127.0.0.1 и доверяет этому заголовку от
-любого клиента; если публикуете порт иначе, укажите в `FORWARDED_ALLOW_IPS`
-адрес прокси.
+Сервер использует `X-Forwarded-For` для ограничений частоты по IP. Прокси
+должен записывать в заголовок адрес, который видит сам, а не передавать
+присланный клиентом: пример nginx выше делает это через `$remote_addr`, Caddy
+и Traefik делают так по умолчанию. Файл compose доверяет прокси на loopback и
+в частных сетях (`FORWARDED_ALLOW_IPS`); если прокси обращается к серверу с
+публичного адреса, укажите этот адрес.
 
 <a id="connecting-a-client"></a>
 
@@ -684,7 +687,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `RELOGIN_MODE` | нет | `ask` | `ask`: участник входит заново, когда истекает его сессия Docmost; `stored_password`: пароль хранится зашифрованным и используется для повторного входа |
 | `DOCMOST_TIMEOUT_SECONDS` | нет | `15` | Таймаут одного запроса к Docmost |
 | `DOCMOST_MAX_RESPONSE_BYTES` | нет | `5242880` | Самый большой ответ Docmost, который читает сервер |
-| `FORWARDED_ALLOW_IPS` | нет | `127.0.0.1` | Прокси, которым доверяется `X-Forwarded-For` (`*` в файле compose) |
+| `FORWARDED_ALLOW_IPS` | нет | `127.0.0.1` | Прокси, которым доверяется `X-Forwarded-For` (loopback и частные сети в файле compose) |
 | `HOST` / `PORT` | нет | `0.0.0.0` / `8000` | Адрес, на котором слушает сервер |
 | `LOG_LEVEL` | нет | `info` | `debug`, `info`, `warning` или `error` |
 | `IMAGE_TAG` | нет | `1` | Тег образа в `compose.yaml` |
