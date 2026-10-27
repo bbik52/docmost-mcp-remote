@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-27
+
 ### Fixed
 
 - Cursor still could not finish signing in: its https callback redirects
