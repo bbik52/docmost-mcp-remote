@@ -7,6 +7,20 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-27
+
+### Fixed
+
+- Desktop apps that receive the answer on their own URL scheme, such as
+  Cursor (`cursor://`), were not always opened after "Allow": the browser
+  stayed on the consent page and a second click said the request had expired.
+  The server now answers with a page that opens the app and has a link to
+  open it by hand. Web apps and loopback addresses still get a redirect.
+- The RFC 8707 `resource` sent by an app is compared by origin and path, so
+  a trailing slash, the default port or an uppercase host no longer cause
+  `invalid_target`. When an app was given the server's base URL instead of
+  the MCP URL, the error now names the URL to use.
+
 ## [1.2.1] - 2026-10-27
 
 ### Security

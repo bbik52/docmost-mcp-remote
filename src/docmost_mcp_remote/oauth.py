@@ -81,6 +81,22 @@ def _normalize_resource(value: str | None) -> str | None:
     return value.rstrip("/") if value else value
 
 
+def _origin_and_path(url: str) -> tuple[str, str] | None:
+    """``url`` as a lowercase origin without default port, and its path without trailing slash."""
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    default = {"http": 80, "https": 443}.get(scheme)
+    origin = f"{scheme}://{host}" + (f":{port}" if port and port != default else "")
+    return origin, parts.path.rstrip("/")
+
+
 class StoredAuthorizationCode(AuthorizationCode):
     grant_id: uuid.UUID
 
@@ -134,6 +150,15 @@ class DocmostOAuthProvider(OAuthProvider):
     @property
     def resource_url(self) -> str:
         return f"{self._settings.public_base}/mcp"
+
+    def resource_allowed(self, resource: str) -> bool:
+        """Whether a client's RFC 8707 ``resource`` names the MCP endpoint.
+
+        Spellings differ between clients (trailing slash, default port, case of
+        the host), so URLs are compared by origin and path.
+        """
+        ours = _origin_and_path(self.resource_url)
+        return ours is not None and _origin_and_path(resource) == ours
 
     def get_routes(self, mcp_path: str | None = None) -> list[Route]:
         routes = []
@@ -195,9 +220,16 @@ class DocmostOAuthProvider(OAuthProvider):
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
-        resource = _normalize_resource(params.resource)
-        if resource is not None and resource != self.resource_url:
-            raise AuthorizeError("invalid_target", "Unknown resource.")
+        if params.resource and not self.resource_allowed(params.resource):
+            logger.warning(
+                "Authorization refused: unknown resource %r, expected %s",
+                params.resource[:200],
+                self.resource_url,
+            )
+            # Usually the app was given the server's base URL instead of the MCP URL.
+            raise AuthorizeError(
+                "invalid_target", f"Unknown resource. Connect the app to {self.resource_url}"
+            )
         bound = params.model_copy(update={"resource": self.resource_url})
         if client.client_id is None:
             raise AuthorizeError("unauthorized_client", "Unknown client.")

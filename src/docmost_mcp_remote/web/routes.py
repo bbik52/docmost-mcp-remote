@@ -426,10 +426,10 @@ class WebPages:
         redirect_uri = str(params.redirect_uri)
         if form.get("action") != "approve":
             logger.info("Member %s denied OAuth client %s", member_id, client.client_id)
-            return RedirectResponse(
+            return self._back_to_client(
                 construct_redirect_uri(redirect_uri, error="access_denied", state=params.state),
-                status_code=303,
-                headers={"Cache-Control": "no-store"},
+                client,
+                allowed=False,
             )
         requested = _requested_scopes(client, params)
         ticked = {str(value) for value in form.getlist("scope")}
@@ -453,8 +453,29 @@ class WebPages:
             client.client_id,
             sorted(scopes),
         )
-        return RedirectResponse(
+        return self._back_to_client(
             construct_redirect_uri(redirect_uri, code=code, state=params.state),
-            status_code=303,
-            headers={"Cache-Control": "no-store"},
+            client,
+            allowed=True,
+        )
+
+    def _back_to_client(
+        self, location: str, client: OAuthClientInformationFull, *, allowed: bool
+    ) -> Response:
+        """Send the browser back to the app with the answer.
+
+        Web apps and loopback listeners get a plain redirect. Desktop apps with
+        their own scheme (``cursor://``) get a page that opens the link: some
+        browsers drop a redirect from a form post to such a scheme without a
+        word, which leaves the member on the consent page with a used request.
+        """
+        if urlsplit(location).scheme in ("http", "https"):
+            return RedirectResponse(
+                location, status_code=303, headers={"Cache-Control": "no-store"}
+            )
+        return self._render(
+            "return.html",
+            client_name=(client.client_name or "the app")[:100],
+            location=location,
+            allowed=allowed,
         )

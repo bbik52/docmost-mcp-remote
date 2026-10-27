@@ -281,6 +281,11 @@ browser window: sign in with your Docmost email and password and choose what
 the client may do. `read` is always granted; tick `write`, `delete` or
 `admin` only for clients you trust.
 
+Give clients the full endpoint, ending in `/mcp`. The server's base URL alone
+is refused with `invalid_target`. Desktop apps that are answered on their own
+URL scheme, such as Cursor, get a page after "Allow" that opens the app; let
+the browser open it, or use the link on the page.
+
 <details open>
 <summary><strong>Claude.ai and Claude Desktop</strong></summary>
 

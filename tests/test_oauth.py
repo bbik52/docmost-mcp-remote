@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import re
 import secrets
 from collections.abc import Iterator
@@ -415,6 +416,54 @@ def test_wrong_resource_is_refused(flow: Flow) -> None:
     response = flow.authorize(flow.client_id(), challenge, resource="https://other.example/mcp")
     assert response.status_code == 302
     assert query(response.headers["location"])["error"] == "invalid_target"
+
+
+def test_resource_spellings_are_accepted(flow: Flow) -> None:
+    parts = urlsplit(flow.public)
+    upper = f"{parts.scheme.upper()}://{parts.netloc.upper()}"
+    client_id = flow.client_id()
+    for resource in (f"{flow.resource}/", f"{upper}/mcp"):
+        verifier, challenge = pkce()
+        path = flow.consent_path(client_id, challenge, resource=resource)
+        code = query(flow.answer(path))["code"]
+        response = flow.exchange(client_id, code, verifier)
+        assert response.status_code == 200, resource
+        mcp = flow.http.post(
+            "/mcp",
+            json={},
+            headers={**MCP_HEADERS, "Authorization": f"Bearer {response.json()['access_token']}"},
+        )
+        assert mcp.status_code != 401, resource
+
+
+@pytest.mark.parametrize("path", ["", "/", "/other", "/mcp/extra", "/mcpx"])
+def test_other_paths_are_not_this_resource(flow: Flow, path: str) -> None:
+    _, challenge = pkce()
+    response = flow.authorize(flow.client_id(), challenge, resource=f"{flow.public}{path}")
+    error = query(response.headers["location"])
+    assert error["error"] == "invalid_target"
+    # The base URL instead of the MCP URL is a common setup mistake.
+    assert flow.resource in error["error_description"]
+
+
+def test_desktop_app_gets_a_page_that_opens_it(flow: Flow) -> None:
+    cursor = "cursor://anysphere.cursor-mcp/oauth/callback"
+    client_id = str(flow.register(redirect_uris=[cursor]).json()["client_id"])
+    _, challenge = pkce()
+    path = flow.consent_path(client_id, challenge, redirect_uri=cursor)
+    page = flow.browser.get(path)
+    csrf = CSRF.search(page.text)
+    assert csrf
+    data = {"csrf": csrf.group(1), "request": query(path)["request"], "action": "approve"}
+    response = flow.browser.post("/oauth/consent", data=data)
+    assert response.status_code == 200
+    link = re.search(r'<a href="([^"]+)"', response.text)
+    assert link
+    location = html.unescape(link.group(1))
+    assert location.startswith(f"{cursor}?")
+    assert set(query(location)) == {"code", "state"}
+    assert f'content="0;url={link.group(1)}"' in response.text
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_code_replay_revokes_grant(flow: Flow) -> None:
