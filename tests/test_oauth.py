@@ -614,3 +614,43 @@ async def test_full_registry_keeps_fresh_and_used_clients(
         await provider.register_client(_client("flood"))
     assert await oauth.load_client("used") is not None
     assert await oauth.load_client("pending") is not None
+
+
+async def test_allowed_emails_apply_to_existing_tokens(engine: AsyncEngine) -> None:
+    store = Store(engine)
+    oauth = OAuthStore(engine)
+    member = await store.upsert_member("user-1", "anna@example.com", "Anna")
+    _, personal = await store.create_personal_token(member.id, "x", frozenset({"read"}))
+    open_provider = DocmostOAuthProvider(make_settings(), store, oauth)
+    assert await open_provider.load_access_token(personal) is not None
+    narrowed = make_settings(allowed_emails="boris@example.com")
+    provider = DocmostOAuthProvider(narrowed, store, oauth)
+    assert await provider.load_access_token(personal) is None
+
+    await oauth.save_client("c1", _client("c1").model_dump_json())
+    client = _client("c1")
+    code = await oauth.create_grant_with_code(
+        member_id=member.id,
+        client_id="c1",
+        client_name="C1",
+        scopes=frozenset({"read"}),
+        code_challenge="x" * 43,
+        redirect_uri=REDIRECT,
+        redirect_uri_provided_explicitly=True,
+        resource=None,
+        ttl=timedelta(minutes=5),
+    )
+    assert await open_provider.load_authorization_code(client, code) is not None
+    assert await provider.load_authorization_code(client, code) is None
+    stored = await oauth.load_code(code)
+    assert stored is not None
+    issued = await oauth.issue_tokens(
+        stored.grant_id,
+        scopes=None,
+        resource="https://mcp.example.com/mcp",
+        access_ttl=timedelta(hours=1),
+        refresh_ttl=timedelta(days=1),
+    )
+    assert await open_provider.load_refresh_token(client, issued.refresh_token) is not None
+    assert await provider.load_refresh_token(client, issued.refresh_token) is None
+    assert await provider.load_access_token(issued.access_token) is None

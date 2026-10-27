@@ -219,6 +219,13 @@ upload_links = Table(
         ForeignKey("members.id", ondelete="CASCADE"),
         nullable=False,
     ),
+    #: The grant that made the link; revoking it ends the link. Empty in links
+    #: made before 1.2.1, which no longer work.
+    Column(
+        "grant_id",
+        UUID(as_uuid=True),
+        ForeignKey("grants.id", ondelete="CASCADE"),
+    ),
     #: SHA-256 of the token in the link.
     Column("token_hash", LargeBinary, nullable=False, unique=True),
     Column("page_id", String(64), nullable=False),

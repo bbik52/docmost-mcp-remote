@@ -56,7 +56,7 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | Phishing through a client name on the consent page | The page shows the redirect host and the account; `write` and `delete` are never preselected | `web/templates/consent.html` |
 | Database leak | Sessions, passwords and snapshots are encrypted with a key that is not in the database; tokens are hashed | `crypto.py`, `db/snapshot_store.py` |
 | Key compromise | Rotation with `SECRET_KEY_PREVIOUS` and `admin rotate-key` | `admin.py`, `tests/test_admin.py` |
-| Prompt injection in page content | Content wrapped as untrusted data; scopes default to `read`; write tools take a snapshot first; delete only to Trash; space management only with the separate `admin` scope, and no removal of members or spaces | `tools/untrusted.py`, `tools/write.py` |
+| Prompt injection in page content | Content wrapped as untrusted data; scopes default to `read`; write tools take a snapshot first; delete only to Trash; space management only with the separate `admin` scope, and no removal of members or spaces; changes that widen who can read a page (moving or copying it to another space) and other risky changes ask the person through MCP elicitation, and fail closed when asking fails | `tools/untrusted.py`, `tools/write.py` |
 | Irreversible overwrite | Snapshot before every body write; the write is not done if the snapshot fails; `restore_snapshot` | `tools/write.py`, `tests/test_write_tools.py` |
 | Docmost accepting a write and dropping it | Read-back after every write; the call fails and names the snapshot | `tools/write.py` |
 | A runaway agent hammering Docmost | `TOOL_CALLS_PER_MINUTE` per member over all clients; page and list size limits | `guard.py`, `tests/test_guard.py` |
@@ -64,8 +64,8 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 | An upload link reaching someone else | A link is 256 random bits, stored only as a hash, names one member and one page, expires after `UPLOAD_RETENTION_MINUTES` and takes at most `UPLOAD_MAX_MB` and 50 files; files reach Docmost only when Done is pressed, after a snapshot, and the page keeps the busy-page guard; the page's script is same-origin only under a strict CSP | `web/uploads.py`, `tests/test_upload_links.py` |
 | Large Docmost responses exhausting memory | Responses are read with a size limit (`DOCMOST_MAX_RESPONSE_BYTES`) and a timeout | `docmost/ce.py` |
 | Secrets or content in logs | Logs carry ids only; a test checks that passwords, tokens, emails and page content do not appear | `tests/test_guard.py` |
-| Admin space restriction bypassed | `ALLOWED_SPACES` is checked in every tool, including writes; outside spaces answer like missing ones | `tools/spaces.py`, `tests/test_write_tools.py` |
-| A member who should lose access | Members revoke grants on the account page; the Admin can revoke grants, all grants of a member, or disable a member | `web/routes.py`, `admin.py` |
+| Admin space restriction bypassed | `ALLOWED_SPACES` is checked in every tool before it changes anything, including writes and restores from Trash; outside spaces answer like missing ones | `tools/spaces.py`, `tests/test_write_tools.py` |
+| A member who should lose access | Members revoke grants on the account page, which also ends the download and upload links the grant made; the Admin can revoke grants, all grants of a member, or disable a member; removing an email from `ALLOWED_EMAILS` stops that member's tokens, web session and links at once | `web/routes.py`, `admin.py` |
 | Container escape or tampering | Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges` | `Dockerfile`, `compose.yaml` |
 | Vulnerable dependencies | Locked dependencies, `pip-audit` in CI, Dependabot | `.github/workflows/ci.yml`, `.github/dependabot.yml` |
 
@@ -80,11 +80,13 @@ vulnerabilities as described in [SECURITY.md](../SECURITY.md).
   was removed, until the retention period ends. Protect the database and its
   backups like Docmost's own.
 - **Download links are bearer links.** Whoever has one can download that one
-  file as the member until it expires, ten minutes after it was made. The
+  file as the member until it expires, ten minutes after it was made, or
+  the grant that made it is revoked. The
   server keeps links out of its access log; a reverse proxy in front of it may
   still log them.
 - **Upload links are bearer links too.** Whoever has one can add files to
-  that one page, as the member, until the link expires or Done is pressed.
+  that one page, as the member, until the link expires, Done is pressed or
+  the grant that made it is revoked.
 - **Rate limits are kept in memory** and reset on restart; run one server
   instance per Docmost.
 - **The reverse proxy is outside this project.** A proxy that forwards plain

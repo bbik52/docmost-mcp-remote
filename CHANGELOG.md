@@ -21,6 +21,18 @@ when upgrading lists it under "Upgrade notes".
 - Upload links refuse bodies without a `Content-Length` (411) and Done
   requests over 64 KB, so a link holder cannot stream unbounded data into
   the server's temporary storage.
+- `move_page_to_space` and `duplicate_page` into another space ask the person
+  first, like `trash_page`: both widen who can read the page, which text in a
+  page could otherwise talk a model into.
+- A client that declares MCP elicitation but fails to ask no longer gets the
+  change made anyway. The request state of a 2026-07-28 confirmation is an
+  HMAC of the grant, the tool, its arguments and the question.
+- Removing an email from `ALLOWED_EMAILS` now takes effect at once for that
+  member's tokens, refresh tokens, web session and links, not only at the
+  next sign-in.
+- Revoking a grant ends the download and upload links it made. Upload links
+  made before this release stop working.
+- `restore_page` checks `ALLOWED_SPACES` before restoring, not after.
 
 ### Upgrade notes
 

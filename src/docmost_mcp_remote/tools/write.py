@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -51,6 +52,8 @@ MAX_CONTENT_CHARS = 500_000
 MAX_JSON_CHARS = 2_000_000
 MAX_DIFF_CHARS = 20_000
 _MAX_SIBLING_PAGES = 10
+#: Pages of a space's Trash searched for a page to restore.
+_MAX_TRASH_PAGES = 10
 #: Pages of workspace members read to find someone by id.
 _MEMBER_PAGES = 10
 MAX_MENTIONS = 10
@@ -204,6 +207,21 @@ async def _all_children(
             return pages
         cursor = result.next_cursor
     raise ToolError("Too many pages at this level to place a page; move it in Docmost.")
+
+
+async def _trashed_in(backend: DocmostBackend, space_ids: Iterable[str], ref: str) -> str:
+    """The id of page ``ref`` in the Trash of one of ``space_ids``."""
+    for space_id in space_ids:
+        cursor: str | None = None
+        for _ in range(_MAX_TRASH_PAGES):
+            found = await backend.list_trash(space_id, cursor=cursor, limit=100)
+            for item in found.items:
+                if ref in (item.id, item.slug_id):
+                    return item.id
+            if not found.has_next_page or not found.next_cursor:
+                break
+            cursor = found.next_cursor
+    raise ToolError("Docmost: Page not found")
 
 
 async def find_person(backend: DocmostBackend, ref: str) -> WorkspaceMember:
@@ -592,7 +610,8 @@ def register(
         description=(
             "Move a page with its child pages to the top level of another space. Everyone in "
             "the target space gains access to them and members of the old space may lose it. "
-            "Child pages you cannot access stay behind as top-level pages of the old space."
+            "Child pages you cannot access stay behind as top-level pages of the old space. "
+            "Clients that can ask the person first do so."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
@@ -600,12 +619,23 @@ def register(
     async def move_page_to_space(
         page: PageRef,
         space_id: Annotated[str, Field(description="Target space id from list_spaces.")],
-    ) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             found = await load_page(backend, page)
             if found.space_id == space_id:
                 raise ToolError("The page is already in this space; use move_page instead.")
             await policy.check(backend, space_id)
+
+            async def question() -> str:
+                target = await backend.get_space(space_id)
+                return (
+                    f"Move the page {named(found.title)} and its child pages to the space "
+                    f"{named(target.name)}? Everyone in that space will be able to read them."
+                )
+
+            asked = await confirm(question)
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
             await backend.move_page_to_space(found.id, space_id)
             moved = await backend.get_page(found.id)
             if moved.space_id != space_id:
@@ -620,8 +650,8 @@ def register(
         description=(
             "Copy a page with its child pages, attachments and labels. Without target_space_id "
             "the copy lands next to the original and is titled 'Copy of ...'; with it, the "
-            "copy goes to the top level of that space under the same title. Comments and "
-            "history are not copied."
+            "copy goes to the top level of that space under the same title, and clients that "
+            "can ask the person first do so. Comments and history are not copied."
         ),
         annotations=_WRITE,
         auth=require_scopes("write"),
@@ -631,12 +661,25 @@ def register(
         target_space_id: Annotated[
             str | None, Field(description="Copy into this space instead of the same one.")
         ] = None,
-    ) -> dict[str, Any]:
-        async def action(backend: DocmostBackend) -> dict[str, Any]:
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
             found = await load_page(backend, page)
             target = target_space_id if target_space_id != found.space_id else None
             if target is not None:
                 await policy.check(backend, target)
+                space_id = target
+
+                async def question() -> str:
+                    space = await backend.get_space(space_id)
+                    return (
+                        f"Copy the page {named(found.title)} and its child pages to the space "
+                        f"{named(space.name)}? Everyone in that space will be able to read the "
+                        "copy."
+                    )
+
+                asked = await confirm(question)
+                if isinstance(asked, mt.InputRequiredResult):
+                    return asked
             copied = await backend.duplicate_page(found.id, space_id=target)
             created = await backend.get_page(copied.id)
             logger.info("Copied page %s to %s", found.id, created.id)
@@ -795,6 +838,9 @@ def register(
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             ref = page_ref(page)
+            if policy.restricted:
+                # The space must be known before the restore: the page is in the Trash.
+                ref = await _trashed_in(backend, await policy.allowed_ids(backend) or set(), ref)
             await backend.restore_from_trash(ref)
             restored = await load_page(backend, ref)
             logger.info("Restored page %s from Trash", restored.id)

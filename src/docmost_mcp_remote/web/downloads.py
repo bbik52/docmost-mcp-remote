@@ -3,7 +3,8 @@
 A link carries, encrypted and authenticated with the server key, the member,
 what to download and when the link expires. Opening it streams the file from
 Docmost with that member's session; nothing is stored on this server. Anyone
-holding a link can use it until it expires, so links live ten minutes.
+holding a link can use it until it expires, so links live ten minutes, and
+only while the grant that made it is not revoked.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from starlette.routing import Route
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.crypto import Cipher, DecryptionError
+from docmost_mcp_remote.db.store import Store
 from docmost_mcp_remote.docmost import (
     DocmostBackend,
     DocmostError,
@@ -62,15 +64,22 @@ class RedactDownloadLinks(logging.Filter):
 
 
 class DownloadLinks:
-    def __init__(self, settings: Settings, members: MemberService, cipher: Cipher) -> None:
+    def __init__(
+        self, settings: Settings, store: Store, members: MemberService, cipher: Cipher
+    ) -> None:
         self._base = settings.public_base
+        self._store = store
         self._members = members
         self._cipher = cipher
 
-    def create(self, member_id: uuid.UUID, kind: Kind, args: dict[str, Any]) -> dict[str, Any]:
+    def create(
+        self, member_id: uuid.UUID, grant_id: uuid.UUID, kind: Kind, args: dict[str, Any]
+    ) -> dict[str, Any]:
         """A link for ``member_id`` and when it expires, as tool result fields."""
         expires = int(time.time()) + LINK_SECONDS
-        payload = json.dumps({"m": str(member_id), "k": kind, "a": args, "x": expires})
+        payload = json.dumps(
+            {"m": str(member_id), "g": str(grant_id), "k": kind, "a": args, "x": expires}
+        )
         blob = self._cipher.encrypt(payload, context=_CONTEXT)
         token = base64.urlsafe_b64encode(blob).decode().rstrip("=")
         return {
@@ -78,21 +87,24 @@ class DownloadLinks:
             "download_expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expires)),
         }
 
-    def _read(self, token: str) -> tuple[uuid.UUID, Kind, dict[str, Any]] | None:
+    async def _read(self, token: str) -> tuple[uuid.UUID, Kind, dict[str, Any]] | None:
         try:
             blob = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
             data = json.loads(self._cipher.decrypt(blob, context=_CONTEXT))
         except (ValueError, DecryptionError):
             return None
-        if not isinstance(data, dict) or int(data.get("x", 0)) < time.time():
+        if not isinstance(data, dict) or int(data.get("x", 0)) < time.time() or "g" not in data:
             return None
-        return uuid.UUID(data["m"]), data["k"], dict(data["a"])
+        member_id, grant_id = uuid.UUID(data["m"]), uuid.UUID(data["g"])
+        if not await self._store.grant_active(member_id, grant_id):
+            return None
+        return member_id, data["k"], dict(data["a"])
 
     def routes(self) -> list[Route]:
         return [Route(DOWNLOAD_PATH, self.download, methods=["GET"])]
 
     async def download(self, request: Request) -> Response:
-        link = self._read(request.path_params["token"])
+        link = await self._read(request.path_params["token"])
         if link is None:
             return _text("This download link is not valid or has expired.", 404)
         member_id, kind, args = link

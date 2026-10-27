@@ -214,6 +214,8 @@ class DocmostOAuthProvider(OAuthProvider):
         stored = await self._oauth.load_code(authorization_code)
         if stored is None or stored.client_id != client.client_id:
             return None
+        if not self._settings.email_allowed(stored.email):
+            return None
         if stored.used:
             # RFC 6749 section 4.1.2: a replayed code revokes what it issued.
             await self._revoke_grant(stored.grant_id, "authorization code replayed")
@@ -255,6 +257,8 @@ class DocmostOAuthProvider(OAuthProvider):
             return None
         stored = await self._oauth.load_token(refresh_token)
         if stored is None or stored.kind != "refresh" or stored.client_id != client.client_id:
+            return None
+        if not self._settings.email_allowed(stored.email):
             return None
         if stored.replaced:
             await self._revoke_grant(stored.grant_id, "refresh token reused")
@@ -317,7 +321,8 @@ class DocmostOAuthProvider(OAuthProvider):
         if not token.startswith(TOKEN_PREFIX) or len(token) > 200:
             return None
         owner = await self._store.find_token(token)
-        if owner is None:
+        # ALLOWED_EMAILS applies to tokens issued before an email was removed from it.
+        if owner is None or not self._settings.email_allowed(owner.email):
             return None
         if owner.kind == "access" and _normalize_resource(owner.resource) != self.resource_url:
             return None

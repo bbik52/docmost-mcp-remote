@@ -61,6 +61,8 @@ class TokenOwner:
     resource: str | None
     #: The OAuth client of the grant; None for personal tokens.
     client_id: str | None
+    #: The member's email, for ``ALLOWED_EMAILS``.
+    email: str
 
 
 def _scopes(text: str) -> frozenset[str]:
@@ -218,6 +220,20 @@ class Store:
             )
         return bool(result.rowcount)
 
+    async def grant_active(self, member_id: uuid.UUID, grant_id: uuid.UUID) -> bool:
+        """The member's grant exists and is not revoked."""
+        async with self.engine.connect() as connection:
+            found = await connection.scalar(
+                select(grants.c.id).where(
+                    and_(
+                        grants.c.id == grant_id,
+                        grants.c.member_id == member_id,
+                        grants.c.revoked_at.is_(None),
+                    )
+                )
+            )
+        return found is not None
+
     async def find_token(self, token: str) -> TokenOwner | None:
         """Resolve a presented bearer token; None when unknown, revoked or expired."""
         query = (
@@ -227,6 +243,7 @@ class Store:
                 grants.c.scopes,
                 grants.c.last_used_at,
                 grants.c.client_id,
+                members.c.email,
                 tokens.c.kind,
                 tokens.c.expires_at,
                 tokens.c.resource,
@@ -270,4 +287,5 @@ class Store:
             kind=row.kind,
             resource=row.resource,
             client_id=row.client_id,
+            email=row.email,
         )
