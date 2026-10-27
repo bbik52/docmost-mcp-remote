@@ -564,8 +564,7 @@ Docmost Community Edition **0.80.1 or newer**. Older versions are refused at
 sign-in and on every tool call: they have published security advisories that
 the endpoints this server calls expose (CVE-2026-34212, fixed in 0.71.0, and
 CVE-2026-48073, fixed in 0.80.1). CI runs the integration tests against
-Docmost 0.80.1, 0.96.0 and
-0.97.0; newer releases work in most cases and log a warning until they are
+Docmost 0.80.1, 0.96.0 and 0.97.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
 password. Labels and backlinks need Docmost 0.90 or newer, and the

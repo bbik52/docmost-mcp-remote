@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-27
+
 ### Security
 
 - GitHub Actions are pinned to commit SHAs and the base images to digests.
@@ -65,6 +67,9 @@ when upgrading lists it under "Upgrade notes".
   your reverse proxy, and make nginx send `X-Forwarded-For $remote_addr`.
 - Docmost 0.80.1 or newer is required. Upgrade Docmost first: on an older
   Docmost, members who are already signed in get an error on every tool call.
+- Personal tokens created from now on expire after 90 days unless another
+  lifetime is picked. Scripts that need a lasting token should pick "never"
+  and keep the token safe.
 
 ## [1.2.0] - 2026-10-26
 
