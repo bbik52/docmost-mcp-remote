@@ -7,6 +7,8 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-27
+
 ### Fixed
 
 - Desktop apps that receive the answer on their own URL scheme, such as
