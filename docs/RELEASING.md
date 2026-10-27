@@ -71,7 +71,8 @@ Release artifacts are not signed yet (ADR 0006).
    project version, is not on `master` or has no changelog entry.
 9. Merge `master` back into `develop`.
 10. On Glama, open the server's admin Dockerfile page, press Deploy, wait for
-    the test to pass, then Make Release, so Glama lists the new version.
+    the test to pass, then Make Release with the version of the tag (Glama
+    proposes the next patch number on its own), so Glama lists the new version.
 
 `release.yml` only runs on tags, so a mistake in it shows up at release
 time. When changing it, check that every action reference exists (a pinned
