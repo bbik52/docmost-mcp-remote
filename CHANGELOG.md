@@ -14,6 +14,16 @@ when upgrading lists it under "Upgrade notes".
   vulnerabilities, and the published image is scanned every week.
 - The image no longer ships pip, whose vendored msgpack, urllib3 and
   setuptools had known vulnerabilities; the server never used it.
+- Titles and names from Docmost (pages, spaces, people, groups, labels),
+  which reach the model outside the untrusted-content wrapper, lose control,
+  bidi and other hidden characters and are cut at 300 characters
+  (descriptions at 1000). The notice for the model now names them.
+- "Sign out everywhere" on the account page ends the member's account page
+  sessions in every browser, on the server, not only by deleting the cookie.
+- Personal tokens can expire: 7, 30, 90 or 365 days, or never. New tokens
+  expire after 90 days unless the member picks another lifetime, and the
+  account page shows when each one expires. Tokens made before keep working
+  without an expiry.
 - The client address used for rate limits can no longer be chosen by the
   client: the compose file trusts `X-Forwarded-For` only from proxies on
   loopback and private networks instead of from everyone, the nginx example

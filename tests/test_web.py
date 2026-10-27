@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -110,6 +111,51 @@ def test_logout(web: TestClient) -> None:
     csrf = csrf_of(web.get("/account").text)
     web.post("/logout", data={"csrf": csrf})
     assert web.get("/account", follow_redirects=False).status_code == 303
+
+
+def test_sign_out_everywhere(web: TestClient) -> None:
+    sign_in(web)
+    elsewhere = dict(web.cookies)
+    csrf = csrf_of(web.get("/account").text)
+    response = web.post("/logout/everywhere", data={"csrf": csrf}, follow_redirects=False)
+    assert response.status_code == 303
+    assert web.get("/account", follow_redirects=False).status_code == 303
+
+    # A session cookie kept by another browser no longer opens the account.
+    web.cookies.update(elsewhere)
+    assert web.get("/account", follow_redirects=False).status_code == 303
+
+    # Signing in again works at once.
+    web.cookies.clear()
+    assert sign_in(web) == "303"
+    assert web.get("/account", follow_redirects=False).status_code == 200
+
+
+def test_sign_out_everywhere_needs_csrf(web: TestClient) -> None:
+    sign_in(web)
+    web.post("/logout/everywhere", data={"csrf": "forged"})
+    assert web.get("/account", follow_redirects=False).status_code == 200
+
+
+def test_personal_token_expiry(web: TestClient) -> None:
+    sign_in(web)
+    csrf = csrf_of(web.get("/account").text)
+    web.post("/account/tokens", data={"csrf": csrf, "name": "default"})
+    web.post("/account/tokens", data={"csrf": csrf, "name": "short", "expires": "7"})
+    web.post("/account/tokens", data={"csrf": csrf, "name": "forever", "expires": "never"})
+    rows = {
+        name: expires
+        for name, expires in re.findall(
+            r"<td>(default|short|forever)</td>(?:.|\n)*?<td>([0-9-]{10}|never)</td>\s*<td><form",
+            web.get("/account").text,
+        )
+    }
+    today = datetime.now(UTC).date()
+    assert rows == {
+        "default": (today + timedelta(days=90)).isoformat(),
+        "short": (today + timedelta(days=7)).isoformat(),
+        "forever": "never",
+    }
 
 
 def test_sign_in_rate_limit(web: TestClient) -> None:

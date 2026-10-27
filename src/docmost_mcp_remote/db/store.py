@@ -27,6 +27,8 @@ class Member:
     docmost_user_id: str
     email: str
     name: str | None
+    #: Web sessions signed in before this time are no longer accepted.
+    web_sessions_after: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,8 @@ class GrantInfo:
     created_at: datetime
     last_used_at: datetime | None
     token_hint: str | None
+    #: When a personal token stops working; None when it does not expire.
+    expires_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +112,19 @@ class Store:
         if row is None:
             return None
         return Member(
-            id=row.id, docmost_user_id=row.docmost_user_id, email=row.email, name=row.name
+            id=row.id,
+            docmost_user_id=row.docmost_user_id,
+            email=row.email,
+            name=row.name,
+            web_sessions_after=row.web_sessions_after,
         )
+
+    async def end_web_sessions(self, member_id: uuid.UUID) -> None:
+        """Sign the member out of the account pages in every browser."""
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(members).where(members.c.id == member_id).values(web_sessions_after=now())
+            )
 
     async def save_session(
         self, member_id: uuid.UUID, token_ciphertext: bytes, password_ciphertext: bytes | None
@@ -152,7 +167,11 @@ class Store:
             )
 
     async def create_personal_token(
-        self, member_id: uuid.UUID, name: str, scopes: frozenset[str]
+        self,
+        member_id: uuid.UUID,
+        name: str,
+        scopes: frozenset[str],
+        expires_at: datetime | None = None,
     ) -> tuple[uuid.UUID, str]:
         """Create a grant with one bearer token. The token is returned once, never stored."""
         grant_id = uuid.uuid4()
@@ -174,6 +193,7 @@ class Store:
                     kind="personal",
                     token_hash=hash_token(token),
                     hint=token[:10],
+                    expires_at=expires_at,
                 )
             )
         return grant_id, token
@@ -184,8 +204,13 @@ class Store:
             .where(tokens.c.grant_id == grants.c.id)
             .scalar_subquery()
         )
+        expires = (
+            select(func.max(tokens.c.expires_at))
+            .where(and_(tokens.c.grant_id == grants.c.id, tokens.c.kind == "personal"))
+            .scalar_subquery()
+        )
         query = (
-            select(grants, hint.label("hint"))
+            select(grants, hint.label("hint"), expires.label("expires"))
             .where(and_(grants.c.member_id == member_id, grants.c.revoked_at.is_(None)))
             .order_by(grants.c.created_at.desc())
         )
@@ -200,6 +225,7 @@ class Store:
                 created_at=row.created_at,
                 last_used_at=row.last_used_at,
                 token_hint=row.hint,
+                expires_at=row.expires,
             )
             for row in rows
         ]
