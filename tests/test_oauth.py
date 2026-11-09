@@ -230,10 +230,50 @@ def test_unauthorized_mcp_points_to_metadata(flow: Flow) -> None:
         ("https://claude.ai/cb#fragment", False),
         ("javascript:alert(1)", False),
         ("data:text/html,hi", False),
+        ("https://claude.ai@evil.example.com/cb", False),
+        ("https://user:pw@claude.ai/api/mcp/auth_callback", False),
+        ("http://user@127.0.0.1:9999/cb", False),
     ],
 )
 def test_redirect_uri_rules(uri: str, allowed: bool) -> None:
     assert redirect_uri_allowed(uri) is allowed
+
+
+CLAUDE_CALLBACKS = (
+    "https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback"
+)
+
+
+@pytest.mark.parametrize(
+    ("uri", "allowed"),
+    [
+        ("https://claude.ai/api/mcp/auth_callback", True),
+        ("https://claude.com/api/mcp/auth_callback", True),
+        ("https://claude.ai/api/mcp/auth_callback/other", False),
+        ("https://evil.example.com/api/mcp/auth_callback", False),
+        ("https://claude.ai@evil.example.com/api/mcp/auth_callback", False),
+        ("cursor://anysphere.cursor-mcp/oauth/callback", False),
+        ("http://127.0.0.1:1/callback", True),
+        ("http://127.0.0.1:65535/any/path", True),
+        ("http://localhost:8080/cb", True),
+        ("http://[::1]:8080/cb", True),
+        ("http://evil.example.com/cb", False),
+        ("javascript:alert(1)", False),
+    ],
+)
+def test_redirect_uri_rules_with_allowlist(uri: str, allowed: bool) -> None:
+    allowlist = make_settings(oauth_redirect_allowlist=CLAUDE_CALLBACKS).oauth_redirect_allowlist
+    assert redirect_uri_allowed(uri, allowlist) is allowed
+
+
+def test_redirect_allowlist_setting() -> None:
+    assert make_settings().oauth_redirect_allowlist == frozenset()
+    assert make_settings(oauth_redirect_allowlist=" , ").oauth_redirect_allowlist == frozenset()
+    parsed = make_settings(oauth_redirect_allowlist=CLAUDE_CALLBACKS).oauth_redirect_allowlist
+    assert parsed == frozenset(CLAUDE_CALLBACKS.split(","))
+    for bad in ("https://user@claude.ai/cb", "not-a-uri", "https://claude.ai/cb#x"):
+        with pytest.raises(ValueError, match="OAUTH_REDIRECT_ALLOWLIST"):
+            make_settings(oauth_redirect_allowlist=bad)
 
 
 def test_registration_refuses_bad_redirects(flow: Flow) -> None:
@@ -245,6 +285,88 @@ def test_registration_refuses_bad_redirects(flow: Flow) -> None:
         response = flow.register(redirect_uris=uris)
         assert response.status_code == 400, uris
         assert response.json()["error"] == "invalid_redirect_uri"
+
+
+def test_registration_without_allowlist_accepts_any_https(flow: Flow) -> None:
+    response = flow.register(redirect_uris=["https://app.example.net/callback"])
+    assert response.status_code == 201, response.text
+
+
+def test_registration_refuses_userinfo_redirect(flow: Flow) -> None:
+    response = flow.register(redirect_uris=["https://claude.ai@evil.example.com/cb"])
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_redirect_uri"
+
+
+@pytest.fixture
+def allowlisted(engine: AsyncEngine) -> Iterator[Flow]:
+    docmost = Recorder(docmost_routes()).client()
+    with RunningServer(docmost, oauth_redirect_allowlist=CLAUDE_CALLBACKS) as running:
+        flow = Flow(running)
+        flow.sign_in()
+        try:
+            yield flow
+        finally:
+            flow.close()
+
+
+def test_allowlist_registration(allowlisted: Flow) -> None:
+    for uris in (
+        ["https://claude.ai/api/mcp/auth_callback"],
+        ["http://127.0.0.1:45678/callback"],
+        ["http://localhost:1234/cb", "http://[::1]:5678/cb"],
+    ):
+        response = allowlisted.register(redirect_uris=uris)
+        assert response.status_code == 201, (uris, response.text)
+    for uris in (
+        ["https://evil.example.com/api/mcp/auth_callback"],
+        ["https://claude.ai/api/mcp/auth_callback", "https://evil.example.com/cb"],
+        ["https://claude.ai@evil.example.com/api/mcp/auth_callback"],
+        ["cursor://anysphere.cursor-mcp/oauth/callback"],
+    ):
+        response = allowlisted.register(redirect_uris=uris, client_name="Claude")
+        assert response.status_code == 400, uris
+        assert response.json()["error"] == "invalid_redirect_uri"
+
+
+async def test_allowlist_rechecked_at_authorize(engine: AsyncEngine) -> None:
+    # A client registered before OAUTH_REDIRECT_ALLOWLIST was set.
+    oauth = OAuthStore(engine)
+    open_provider = DocmostOAuthProvider(make_settings(), Store(engine), oauth)
+    evil = "https://evil.example.com/cb"
+    client = OAuthClientInformationFull(
+        client_id="old-client",
+        client_name="Claude",
+        redirect_uris=[AnyUrl(evil), AnyUrl(REDIRECT)],
+        scope="read write",
+        token_endpoint_auth_method="none",
+    )
+    await open_provider.register_client(client)
+    strict = DocmostOAuthProvider(
+        make_settings(oauth_redirect_allowlist=CLAUDE_CALLBACKS), Store(engine), oauth
+    )
+    loaded = await strict.get_client("old-client")
+    assert loaded is not None
+    assert [str(uri) for uri in loaded.redirect_uris or []] == [REDIRECT]
+
+    docmost = Recorder(docmost_routes()).client()
+    with RunningServer(docmost, oauth_redirect_allowlist=CLAUDE_CALLBACKS) as running:
+        flow = Flow(running)
+        try:
+            _, challenge = pkce()
+            refused_once = await anyio.to_thread.run_sync(
+                lambda: flow.authorize("old-client", challenge, redirect_uri=evil)
+            )
+            # An error page, never a redirect to the refused URI.
+            assert refused_once.status_code == 400
+            assert "location" not in refused_once.headers
+            allowed = await anyio.to_thread.run_sync(
+                lambda: flow.authorize("old-client", challenge)
+            )
+            assert allowed.status_code == 302
+            assert allowed.headers["location"].startswith(f"{running.public_url}/oauth/consent")
+        finally:
+            flow.close()
 
 
 def test_registration_refuses_unknown_scopes(flow: Flow) -> None:

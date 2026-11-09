@@ -173,6 +173,7 @@ services:
       SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ALLOWED_SPACES: ${ALLOWED_SPACES:-}
+      OAUTH_REDIRECT_ALLOWLIST: ${OAUTH_REDIRECT_ALLOWLIST:-}
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
@@ -689,6 +690,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `SECRET_KEY_PREVIOUS` | no | | The old key during a rotation |
 | `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
 | `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
+| `OAUTH_REDIRECT_ALLOWLIST` | no | empty | Comma-separated exact redirect URIs OAuth clients may register; loopback `http://127.0.0.1`, `localhost` and `[::1]` redirects on any port stay allowed. Empty accepts any https redirect. Recommended for Claude: `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback` |
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |

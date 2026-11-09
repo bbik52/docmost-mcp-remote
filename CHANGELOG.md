@@ -7,6 +7,26 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Security
+
+- Members no longer act as each other in Docmost. The client shared by all
+  members kept the `authToken` cookie that Docmost sets at sign-in, and
+  Docmost reads that cookie before the bearer token, so after one member
+  signed in, other members' requests could run as that member. The shared
+  client now never stores or sends cookies; the sign-in still reads the token
+  from its own response.
+- New optional `OAUTH_REDIRECT_ALLOWLIST`: comma-separated exact redirect URIs
+  that OAuth clients may register. With it set, dynamic client registration
+  refuses any other redirect URI with `invalid_redirect_uri`, so nobody can
+  register a client named like a trusted app with their own redirect and send
+  a member a consent link. Loopback redirects (`http://127.0.0.1`,
+  `http://localhost`, `http://[::1]`, any port) stay allowed. Clients
+  registered before the setting keep only the redirect URIs it allows, and
+  `/authorize` refuses the others without redirecting. Empty (the default)
+  keeps the previous behavior. For Claude use
+  `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`.
+- Redirect URIs with user info (`https://trusted@evil.example`) are refused.
+
 ## [1.2.3] - 2026-10-27
 
 ### Fixed

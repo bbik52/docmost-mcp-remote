@@ -172,6 +172,7 @@ services:
       SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ALLOWED_SPACES: ${ALLOWED_SPACES:-}
+      OAUTH_REDIRECT_ALLOWLIST: ${OAUTH_REDIRECT_ALLOWLIST:-}
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
@@ -692,6 +693,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `SECRET_KEY_PREVIOUS` | нет | | Старый ключ во время смены |
 | `ALLOWED_EMAILS` | нет | пусто | Email через запятую, которым разрешён вход; пусто: любой пользователь Docmost |
 | `ALLOWED_SPACES` | нет | пусто | Slug или id пространств через запятую, доступных через этот сервер; пусто: все |
+| `OAUTH_REDIRECT_ALLOWLIST` | нет | пусто | Точные redirect URI через запятую, которые могут регистрировать OAuth-клиенты; loopback-адреса `http://127.0.0.1`, `localhost` и `[::1]` на любом порту разрешены всегда. Пусто: любой https. Для Claude: `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback` |
 | `MAX_PAGE_CHARS` | нет | `60000` | Самое длинное возвращаемое тело страницы; длиннее обрезается |
 | `SNAPSHOT_RETENTION_DAYS` | нет | `30` | Сколько дней хранится снимок тела страницы |
 | `AUDIT_RETENTION_DAYS` | нет | `90` | Сколько дней хранится запись журнала аудита |
