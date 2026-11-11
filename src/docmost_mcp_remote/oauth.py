@@ -58,23 +58,39 @@ REGISTRATIONS_PER_IP = (10, 60 * 60)
 _FORBIDDEN_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "about", "blob", "ftp"})
 
 
-def redirect_uri_allowed(uri: str) -> bool:
-    """https, http on a loopback address, or a private-use scheme of a native app."""
+def _is_loopback_http(scheme: str, host: str) -> bool:
+    if scheme != "http":
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def redirect_uri_allowed(uri: str, allowlist: frozenset[str] = frozenset()) -> bool:
+    """Whether ``uri`` may be a client's redirect target.
+
+    Without an ``allowlist``: https, http on a loopback address, or a
+    private-use scheme of a native app. With one, only http on a loopback
+    address (any port, as RFC 8252 asks) and the listed URIs, compared
+    exactly. User info (``user@host``) is never accepted: it hides the real
+    host from the member reading the consent page.
+    """
     parts = urlsplit(uri)
     scheme = parts.scheme.lower()
-    if parts.fragment or not scheme:
+    if parts.fragment or not scheme or "@" in parts.netloc:
         return False
+    if scheme in _FORBIDDEN_SCHEMES:
+        return False
+    if _is_loopback_http(scheme, parts.hostname or ""):
+        return True
+    if allowlist:
+        return uri in allowlist
     if scheme == "https":
         return bool(parts.hostname)
-    if scheme == "http":
-        host = parts.hostname or ""
-        if host == "localhost":
-            return True
-        try:
-            return ipaddress.ip_address(host).is_loopback
-        except ValueError:
-            return False
-    return scheme not in _FORBIDDEN_SCHEMES
+    return scheme != "http"
 
 
 def _normalize_resource(value: str | None) -> str | None:
@@ -178,10 +194,24 @@ class DocmostOAuthProvider(OAuthProvider):
         if len(client_id) > 64:
             return None
         info = await self._oauth.load_client(client_id)
-        return OAuthClientInformationFull.model_validate_json(info) if info else None
+        if not info:
+            return None
+        client = OAuthClientInformationFull.model_validate_json(info)
+        allowlist = self._settings.oauth_redirect_allowlist
+        if allowlist and client.redirect_uris:
+            # Clients registered before OAUTH_REDIRECT_ALLOWLIST was set keep only
+            # the redirect URIs it allows. /authorize then refuses the others with
+            # an error page and never redirects to them.
+            kept = [
+                uri for uri in client.redirect_uris if redirect_uri_allowed(str(uri), allowlist)
+            ]
+            if len(kept) != len(client.redirect_uris):
+                client = client.model_copy(update={"redirect_uris": kept})
+        return client
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         uris = [str(uri) for uri in client_info.redirect_uris or []]
+        allowlist = self._settings.oauth_redirect_allowlist
         if not uris:
             raise RegistrationError(
                 "invalid_redirect_uri", "At least one redirect URI is required."
@@ -191,10 +221,12 @@ class DocmostOAuthProvider(OAuthProvider):
                 "invalid_redirect_uri", f"At most {MAX_REDIRECT_URIS} redirect URIs are allowed."
             )
         for uri in uris:
-            if len(uri) > 2000 or not redirect_uri_allowed(uri):
+            if len(uri) > 2000 or not redirect_uri_allowed(uri, allowlist):
                 raise RegistrationError(
                     "invalid_redirect_uri",
-                    "Redirect URIs must use https, http on a loopback address, "
+                    "This redirect URI is not allowed on this server."
+                    if allowlist
+                    else "Redirect URIs must use https, http on a loopback address, "
                     "or a private-use scheme.",
                 )
         if client_info.client_name and len(client_info.client_name) > 200:

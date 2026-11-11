@@ -11,6 +11,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from http.cookiejar import Cookie, CookieJar, DefaultCookiePolicy
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -72,6 +73,26 @@ def _file_name(disposition: str | None) -> str | None:
     return unquote(match.group(1)) if match else None
 
 
+class _RejectAllCookies(DefaultCookiePolicy):
+    """Cookie policy that never stores a cookie and never sends one."""
+
+    def set_ok(self, cookie: Cookie, request: Any) -> bool:
+        return False
+
+    def return_ok(self, cookie: Cookie, request: Any) -> bool:
+        return False
+
+
+async def _drop_cookie_header(request: httpx.Request) -> None:
+    """Make sure no request to Docmost carries a Cookie header.
+
+    Docmost reads the ``authToken`` cookie before the bearer token, so a
+    cookie on the shared client would make every member act as whoever
+    signed in last.
+    """
+    request.headers.pop("cookie", None)
+
+
 def _limit(value: int) -> int:
     return max(1, min(value, MAX_PAGE_SIZE))
 
@@ -100,11 +121,18 @@ class CeDocmostClient:
     ) -> None:
         self._max_response_bytes = max_response_bytes
         self.web_url = base_url.rstrip("/")
+        # The client is shared by all members. It must never keep cookies:
+        # Docmost's sign-in sets an ``authToken`` cookie and Docmost prefers
+        # that cookie over the bearer token, so a stored cookie would run
+        # every later request as the member who signed in. The sign-in reads
+        # the token from its own response's Set-Cookie instead.
         self._http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api",
             timeout=timeout,
             transport=transport,
             follow_redirects=False,
+            cookies=CookieJar(policy=_RejectAllCookies()),
+            event_hooks={"request": [_drop_cookie_header]},
             headers={"accept": "application/json", "user-agent": "docmost-mcp-remote"},
         )
 
