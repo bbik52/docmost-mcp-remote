@@ -356,6 +356,10 @@ Then run `/mcp` in Claude Code to sign in.
 Connected apps and tokens are listed and revoked on the account page,
 `PUBLIC_URL/account`.
 
+Operators can optionally restrict OAuth callbacks with `OAUTH_REDIRECT_ALLOWLIST`.
+It stays empty by default. See the [callback guide](docs/oauth-clients.md) for
+seven common clients, exact addresses, a multi-client example and setup steps.
+
 <a id="tools"></a>
 
 ## 🧰 Tools
@@ -690,7 +694,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `SECRET_KEY_PREVIOUS` | no | | The old key during a rotation |
 | `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
 | `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
-| `OAUTH_REDIRECT_ALLOWLIST` | no | empty | Comma-separated exact redirect URIs OAuth clients may register; loopback `http://127.0.0.1`, `localhost` and `[::1]` redirects on any port stay allowed. Empty accepts any https redirect. Recommended for Claude: `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback` |
+| `OAUTH_REDIRECT_ALLOWLIST` | no | empty | Optional comma-separated exact OAuth callback URIs; empty keeps supported redirects open. Loopback http callbacks stay allowed on any port. See the [callback guide for seven common clients](docs/oauth-clients.md). |
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |

@@ -23,8 +23,10 @@ when upgrading lists it under "Upgrade notes".
   `http://localhost`, `http://[::1]`, any port) stay allowed. Clients
   registered before the setting keep only the redirect URIs it allows, and
   `/authorize` refuses the others without redirecting. Empty (the default)
-  keeps the previous behavior. For Claude use
-  `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`.
+  keeps the previous behavior. See [OAuth callback setup](docs/oauth-clients.md)
+  for client-specific addresses.
+- Added a callback guide for seven common AI clients, including per-connection
+  ChatGPT callbacks and desktop loopback exceptions.
 - Redirect URIs with user info (`https://trusted@evil.example`) are refused.
 
 ## [1.2.3] - 2026-10-27

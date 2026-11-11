@@ -354,6 +354,10 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 Подключённые приложения и токены видны и отзываются на странице аккаунта,
 `PUBLIC_URL/account`.
 
+Администратор может ограничить OAuth-коллбэки через `OAUTH_REDIRECT_ALLOWLIST`.
+По умолчанию настройка пустая. В [руководстве по коллбэкам](docs/oauth-clients.md)
+есть таблица семи популярных клиентов, точные адреса, общий пример и порядок настройки.
+
 <a id="tools"></a>
 
 ## 🧰 Инструменты
@@ -693,7 +697,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `SECRET_KEY_PREVIOUS` | нет | | Старый ключ во время смены |
 | `ALLOWED_EMAILS` | нет | пусто | Email через запятую, которым разрешён вход; пусто: любой пользователь Docmost |
 | `ALLOWED_SPACES` | нет | пусто | Slug или id пространств через запятую, доступных через этот сервер; пусто: все |
-| `OAUTH_REDIRECT_ALLOWLIST` | нет | пусто | Точные redirect URI через запятую, которые могут регистрировать OAuth-клиенты; loopback-адреса `http://127.0.0.1`, `localhost` и `[::1]` на любом порту разрешены всегда. Пусто: любой https. Для Claude: `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback` |
+| `OAUTH_REDIRECT_ALLOWLIST` | нет | пусто | Необязательный список точных OAuth-коллбэков через запятую; по умолчанию пусто, разрешены поддерживаемые адреса. Loopback http разрешён на любом порту. См. [таблицу семи популярных клиентов и настройку](docs/oauth-clients.md). |
 | `MAX_PAGE_CHARS` | нет | `60000` | Самое длинное возвращаемое тело страницы; длиннее обрезается |
 | `SNAPSHOT_RETENTION_DAYS` | нет | `30` | Сколько дней хранится снимок тела страницы |
 | `AUDIT_RETENTION_DAYS` | нет | `90` | Сколько дней хранится запись журнала аудита |
