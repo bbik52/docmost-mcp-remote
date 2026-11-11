@@ -28,6 +28,9 @@ Claude Code, Cursor, VS Code or any other MCP client. Every member signs in
 with their own Docmost account, so the assistant sees exactly what they can
 see and every change in Docmost carries their name.
 
+Docker images use Python 3.15 and support amd64 and arm64. Installing the
+Python package directly supports Python 3.12 through 3.15.
+
 > Independent community project, not affiliated with or endorsed by Docmost, Inc.
 > Docmost is a trademark of Docmost, Inc.; the name is used only to say which
 > software this server works with.
