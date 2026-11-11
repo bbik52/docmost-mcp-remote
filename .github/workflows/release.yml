@@ -107,6 +107,8 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          # Re-run Debian package updates even when the base digest is unchanged.
+          no-cache: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

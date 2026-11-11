@@ -81,6 +81,12 @@ time. When changing it, check that every action reference exists. Actions
 are pinned to a commit SHA with the version in a comment
 (`uses: owner/action@<sha> # v1.2.3`); Dependabot keeps both up to date.
 
+Release container builds disable the Docker layer cache so the Debian package
+update step runs on every release, even when the pinned Python base digest has
+not changed. Available package updates can change the contents of a rebuild of
+the same source commit. Deploy the tested image by digest when exact rollback
+is needed; running containers receive these updates only after redeployment.
+
 A failed job can be re-run from the Actions page; PyPI, ghcr.io and the
 registry do not accept the same version twice with different content, so a
 broken release is fixed with a new patch version, not by moving the tag.
