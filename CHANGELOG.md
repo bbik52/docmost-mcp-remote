@@ -29,6 +29,12 @@ when upgrading lists it under "Upgrade notes".
   ChatGPT callbacks and desktop loopback exceptions.
 - Redirect URIs with user info (`https://trusted@evil.example`) are refused.
 
+### Container
+
+- Refresh the pinned Python 3.13 base image and upgrade installed Debian
+  packages at build time. Release builds disable the layer cache so system
+  package updates are checked again for each release.
+
 ## [1.2.3] - 2026-10-27
 
 ### Fixed
