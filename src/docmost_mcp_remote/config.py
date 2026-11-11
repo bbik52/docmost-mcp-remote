@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import AnyHttpUrl, AnyUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
@@ -59,6 +60,11 @@ class Settings(BaseSettings):
         default=frozenset(),
         description="Comma-separated space slugs or ids members may use through this server; "
         "empty allows every space the member can see in Docmost.",
+    )
+    oauth_redirect_allowlist: Annotated[frozenset[str], NoDecode] = Field(
+        default=frozenset(),
+        description="Comma-separated exact redirect URIs that OAuth clients may register; "
+        "loopback http redirects stay allowed. Empty accepts any https redirect.",
     )
     max_page_chars: int = Field(
         default=60_000,
@@ -145,6 +151,25 @@ class Settings(BaseSettings):
     def _split_spaces(cls, value: object) -> object:
         if isinstance(value, str):
             return frozenset(part.strip() for part in value.split(",") if part.strip())
+        return value
+
+    @field_validator("oauth_redirect_allowlist", mode="before")
+    @classmethod
+    def _split_redirects(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split(",") if part.strip()]
+        if isinstance(value, list | set | frozenset | tuple):
+            uris = set()
+            for part in value:
+                parts = urlsplit(str(part).strip())
+                if not parts.scheme or not parts.netloc or parts.fragment or "@" in parts.netloc:
+                    raise ValueError(
+                        f"OAUTH_REDIRECT_ALLOWLIST entry {str(part)[:200]!r} must be an "
+                        "absolute URI without a fragment or user info"
+                    )
+                # Compare in the form the OAuth library gives registered URIs.
+                uris.add(str(AnyUrl(str(part).strip())))
+            return frozenset(uris)
         return value
 
     @field_validator("allowed_emails", mode="before")
