@@ -20,6 +20,11 @@ Thanks for your interest. Issues and pull requests are welcome.
 
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.12 or newer.
 
+CI tests Python 3.12 through 3.15. Docmost integration tests and the published
+Docker images use Python 3.15; container build, startup and vulnerability checks
+run natively on both amd64 and arm64. Keep the package compatible with Python
+3.12 when changing source code or dependencies.
+
 ```sh
 uv sync
 docker run -d -p 5433:5432 -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test postgres:17-alpine

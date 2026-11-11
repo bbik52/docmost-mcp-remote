@@ -15,7 +15,7 @@ from docmost_mcp_remote.docmost import (
     DocmostUnavailableError,
     UnsupportedDocmostVersionError,
 )
-from docmost_mcp_remote.docmost.ce import MAX_PAGE_SIZE
+from docmost_mcp_remote.docmost.ce import MAX_PAGE_SIZE, CeDocmostClient
 from tests.fakes import Recorder, error, ok
 
 PAGE = {
@@ -269,3 +269,47 @@ async def test_check_reachable() -> None:
 
     with pytest.raises(DocmostUnavailableError):
         await Recorder({"/api/health": error(503, "down")}).client().check_reachable()
+
+
+@pytest.mark.parametrize(
+    ("base_url", "cookie_flags"),
+    [
+        ("http://docs.example.com", "Path=/; HttpOnly"),
+        ("https://docs.example.com", "Path=/; HttpOnly; Secure"),
+    ],
+)
+async def test_sign_in_cookie_never_reaches_other_members(base_url: str, cookie_flags: str) -> None:
+    # Docmost prefers the authToken cookie over the bearer token, so a cookie
+    # kept by the shared client would run member B's requests as member A.
+    mock = Recorder(
+        {
+            "/api/auth/login": ok(
+                None, headers={"set-cookie": f"authToken=token-of-a; {cookie_flags}"}
+            ),
+            "/api/users/me": ok(
+                {"user": {"id": "u2", "email": "b@example.com", "workspaceId": "w1"}}
+            ),
+        }
+    )
+    client = CeDocmostClient(base_url, transport=httpx.MockTransport(mock))
+
+    assert await client.login("a@example.com", "pw") == "token-of-a"
+    await client.session("token-of-b").current_user()
+    await client.open("POST", "/users/me", "token-of-b")
+
+    assert len(client._http.cookies.jar) == 0
+    for request in mock.requests[1:]:
+        assert "cookie" not in request.headers
+        assert request.headers.get_list("authorization") == ["Bearer token-of-b"]
+
+
+async def test_no_cookie_header_even_if_one_is_set_on_the_client() -> None:
+    mock = Recorder(
+        {"/api/users/me": ok({"user": {"id": "u2", "email": "b@example.com", "workspaceId": "w1"}})}
+    )
+    client = mock.client()
+    client._http.headers["cookie"] = "authToken=token-of-a"
+
+    await client.session("token-of-b").current_user()
+
+    assert "cookie" not in mock.requests[0].headers

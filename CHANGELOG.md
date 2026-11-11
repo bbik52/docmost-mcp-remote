@@ -7,6 +7,56 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-11-11
+
+### Upgrade notes
+
+- Upgrade and restart the server to apply the Docmost session isolation fix.
+  No database schema changes are included in this release.
+- `OAUTH_REDIRECT_ALLOWLIST` is optional and empty by default. When enabling
+  it, include the exact callbacks of all intended clients; existing grants
+  and tokens are not revoked automatically. See the
+  [callback guide](docs/oauth-clients.md).
+- Docker images now run Python 3.15.2. Direct package installations continue
+  to support Python 3.12 through 3.15.
+
+### Security
+
+- Prevent requests for one member from using another member's Docmost
+  session cookie. The shared HTTP client previously kept the `authToken`
+  cookie returned at sign-in, which Docmost reads before the bearer token.
+  It now never stores or sends cookies; sign-in still reads the token from
+  its own response.
+- Add optional `OAUTH_REDIRECT_ALLOWLIST` to restrict OAuth client callback
+  addresses and reduce registrations that imitate trusted app names. New
+  registrations must use allowed callbacks, and existing clients' callbacks
+  are checked when loaded. HTTP loopback callbacks on any port stay allowed.
+- Reject user info (`user@host`) in newly registered OAuth redirect URIs.
+
+### Changed
+
+- Run Docker images on a refreshed, digest-pinned Python 3.15 base and upgrade
+  installed Debian packages during the build. Release builds disable the
+  layer cache so available system package updates are checked on every release.
+- Update FastMCP to 4.1.6, pydantic-settings to 2.16.2 and python-multipart
+  to 0.0.33, along with the locked development dependencies.
+- Test Python 3.12, 3.13, 3.14 and 3.15 in CI. Run Docmost integration tests
+  explicitly on Python 3.15 and build, start and scan containers natively on
+  both amd64 and arm64.
+- Update the setup-uv, Docker registry login and Cosign installer actions.
+
+### Documentation
+
+- Document OAuth callbacks for seven common AI clients, including ChatGPT's
+  connection-specific callbacks and desktop loopback exceptions, with a
+  multi-client configuration example.
+- Document the supported Python versions and contributor attribution rules.
+
+### Acknowledgements
+
+- Thanks to [osh-labs](https://github.com/osh-labs) for the session isolation,
+  OAuth callback protections and container package update contributions.
+
 ## [1.2.3] - 2026-10-27
 
 ### Fixed

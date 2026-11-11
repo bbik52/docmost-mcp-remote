@@ -28,6 +28,9 @@ Claude Code, Cursor, VS Code or any other MCP client. Every member signs in
 with their own Docmost account, so the assistant sees exactly what they can
 see and every change in Docmost carries their name.
 
+Docker images use Python 3.15 and support amd64 and arm64. Installing the
+Python package directly supports Python 3.12 through 3.15.
+
 > Independent community project, not affiliated with or endorsed by Docmost, Inc.
 > Docmost is a trademark of Docmost, Inc.; the name is used only to say which
 > software this server works with.
@@ -173,6 +176,7 @@ services:
       SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
       ALLOWED_SPACES: ${ALLOWED_SPACES:-}
+      OAUTH_REDIRECT_ALLOWLIST: ${OAUTH_REDIRECT_ALLOWLIST:-}
       RELOGIN_MODE: ${RELOGIN_MODE:-ask}
       SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-30}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-90}
@@ -354,6 +358,10 @@ Then run `/mcp` in Claude Code to sign in.
 
 Connected apps and tokens are listed and revoked on the account page,
 `PUBLIC_URL/account`.
+
+Operators can optionally restrict OAuth callbacks with `OAUTH_REDIRECT_ALLOWLIST`.
+It stays empty by default. See the [callback guide](docs/oauth-clients.md) for
+seven common clients, exact addresses, a multi-client example and setup steps.
 
 <a id="tools"></a>
 
@@ -689,6 +697,7 @@ IMAGE_TAG=1.1.0 docker compose up -d
 | `SECRET_KEY_PREVIOUS` | no | | The old key during a rotation |
 | `ALLOWED_EMAILS` | no | empty | Comma-separated emails allowed to sign in; empty allows every Docmost user |
 | `ALLOWED_SPACES` | no | empty | Comma-separated space slugs or ids members may use through this server; empty allows all |
+| `OAUTH_REDIRECT_ALLOWLIST` | no | empty | Optional comma-separated exact OAuth callback URIs; empty keeps supported redirects open. Loopback http callbacks stay allowed on any port. See the [callback guide for seven common clients](docs/oauth-clients.md). |
 | `MAX_PAGE_CHARS` | no | `60000` | Longest page body returned; longer bodies are truncated |
 | `SNAPSHOT_RETENTION_DAYS` | no | `30` | Days a snapshot of a page body is kept |
 | `AUDIT_RETENTION_DAYS` | no | `90` | Days an audit log entry is kept |
