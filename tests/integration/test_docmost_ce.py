@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
@@ -12,7 +13,7 @@ from docmost_mcp_remote.docmost import (
     DocmostNotFoundError,
 )
 from docmost_mcp_remote.docmost.ce import CeDocmostSession
-from docmost_mcp_remote.docmost.version import Version
+from docmost_mcp_remote.docmost.version import Version, parse_version
 from tests.integration.conftest import OWNER
 
 pytestmark = pytest.mark.integration
@@ -191,7 +192,13 @@ async def test_converted_markdown_matches_docmost(
     docmost = (await owner.get_page(page.id)).content
     ours = await owner.get_page_document(page.id)
     version = (await owner.version()).version
-    if version is None or version >= Version(0, 97, 0):
+    if version is None:
+        # CI pins the image tag even when Docmost's GitHub version lookup fails.
+        try:
+            version = parse_version(os.environ.get("DOCMOST_VERSION", ""))
+        except ValueError:
+            pytest.skip("Docmost did not report its version and no versioned image tag is set")
+    if version >= Version(0, 97, 0):
         assert ours.strip() == docmost.strip()
     else:
         # Older Docmost lays out lists and tables differently; the text matches.
