@@ -7,6 +7,36 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-11-16
+
+### Upgrade notes
+
+- Upgrade and restart the server to use the patched Python dependencies.
+  Container deployments need the new image; restarting an existing image
+  does not update its dependencies. No database schema or configuration
+  changes are included in this release.
+
+### Security
+
+- Update dnspython to 2.9.2 to fix excessive memory and CPU use when parsing
+  WKS zone-file records (CVE-2026-128089).
+- Update opentelemetry-api to 1.45.2 to fix regular expression denial of
+  service when extracting a crafted `traceparent` value (CVE-2026-126360).
+- Update the transitive Authlib dependency to 1.9.6, including upstream
+  fixes for ID-JAG grants, OpenID Connect redirects and JOSE key handling.
+
+### Changed
+
+- Update FastMCP and fastmcp-slim from 4.1.6 to 4.1.8, incorporating upstream
+  OAuth, redirect URI validation, schema and client stability fixes.
+- Update Ruff from 0.17.3 to 0.17.4.
+
+### Fixed
+
+- Use the pinned Docmost image version in the Markdown integration test
+  when Docmost's GitHub version lookup fails. Keep exact comparisons for
+  newer versions and add regression coverage for older and unknown versions.
+
 ## [1.2.4] - 2026-11-11
 
 ### Upgrade notes
