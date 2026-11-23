@@ -19,11 +19,12 @@ from pydantic import Field
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
-from docmost_mcp_remote.docmost.models import Group, Space, SpaceRole, WorkspaceMember
+from docmost_mcp_remote.docmost.models import Group, Locale, Space, SpaceRole, WorkspaceMember
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
-from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.common import as_member, require_known_version
 from docmost_mcp_remote.tools.confirm import confirm, named
-from docmost_mcp_remote.tools.read import Cursor, Limit
+from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
@@ -64,6 +65,7 @@ def _space(space: Space, docmost_base: str) -> dict[str, Any]:
         "slug": space.slug,
         "description": space.description or None,
         "member_count": space.member_count,
+        "home_page_id": space.home_page_id,
         "url": f"{docmost_base}/s/{space.slug}" if space.slug else None,
     }
 
@@ -253,6 +255,128 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 space_id, name=name, slug=slug, description=description
             )
             return _space(space, docmost_base)
+
+        return await as_member(members, action)
+
+    async def change_archive(
+        space_id: str, archived: bool
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            await require_known_version(backend, Version(0, 98, 0))
+            await policy.check(backend, space_id)
+            space = await backend.get_space(space_id)
+            if (space.archived_at is not None) == archived:
+                return {"id": space.id, "archived": archived, "changed": False}
+            verb = "Archive" if archived else "Unarchive"
+            asked = await confirm(f"{verb} the Docmost space {named(space.name)}?")
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
+            await backend.set_space_archived(space.id, archived)
+            updated = await backend.get_space(space.id)
+            if (updated.archived_at is not None) != archived:
+                raise ToolError("Docmost did not confirm the requested archive status.")
+            return {"id": space.id, "archived": archived, "changed": True}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="archive_space",
+        description=(
+            "Archive a space to hide it from active lists and global search. Reversible; "
+            "needs Docmost 0.98+ and space admin rights."
+        ),
+        annotations={**_ADMIN, "destructiveHint": True},
+        auth=require_scopes("admin"),
+    )
+    async def archive_space(space_id: SpaceId) -> dict[str, Any] | mt.InputRequiredResult:
+        return await change_archive(space_id, True)
+
+    @mcp.tool(
+        name="unarchive_space",
+        description=(
+            "Restore an archived space to active lists and search. "
+            "Needs Docmost 0.98+ and space admin rights."
+        ),
+        annotations=_ADMIN,
+        auth=require_scopes("admin"),
+    )
+    async def unarchive_space(space_id: SpaceId) -> dict[str, Any] | mt.InputRequiredResult:
+        return await change_archive(space_id, False)
+
+    @mcp.tool(
+        name="set_space_homepage",
+        description=(
+            "Choose the page shown when opening a space, or pass page=null for the "
+            "space overview. The page must be in that space. "
+            "Needs Docmost 0.98+ and space admin rights."
+        ),
+        annotations=_ADMIN,
+        auth=require_scopes("admin"),
+    )
+    async def set_space_homepage(
+        space_id: SpaceId,
+        page: Annotated[
+            str | None, Field(description="Page id, slug id or URL; null resets to the overview.")
+        ],
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            await policy.check(backend, space_id)
+            space = await backend.get_space(space_id)
+            page_id = None
+            if page is not None:
+                target = await backend.get_page(page_ref(page))
+                if target.space_id != space.id or target.deleted_at is not None:
+                    raise ToolError("The home page must be a non-trashed page of this space.")
+                page_id = target.id
+            changed = space.home_page_id != page_id
+            if changed:
+                await backend.set_space_homepage(space.id, page_id)
+                space = await backend.get_space(space.id)
+                if space.home_page_id != page_id:
+                    raise ToolError("Docmost did not confirm the requested home page.")
+            return {**_space(space, docmost_base), "changed": changed}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="get_workspace_language",
+        description=("Read the default workspace language only. Needs Docmost 0.98+."),
+        annotations=_READ_ONLY,
+        auth=require_scopes("admin"),
+    )
+    async def get_workspace_language() -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            return {"default_locale": await backend.workspace_default_locale()}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="set_workspace_language",
+        description=(
+            "Change the default workspace language for new members; existing members "
+            "keep their language. Needs Docmost 0.98+ and workspace admin or owner rights."
+        ),
+        annotations=_ADMIN,
+        auth=require_scopes("admin"),
+    )
+    async def set_workspace_language(
+        locale: Annotated[Locale, Field(description="The default language for new members.")],
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            await require_known_version(backend, Version(0, 98, 0))
+            previous = await backend.workspace_default_locale()
+            if previous == locale:
+                return {"default_locale": previous, "changed": False}
+            asked = await confirm(f"Set the Docmost workspace default language to {locale}?")
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
+            await backend.set_workspace_default_locale(locale)
+            saved = await backend.workspace_default_locale()
+            if saved != locale:
+                raise ToolError("Docmost did not confirm the requested workspace language.")
+            return {"default_locale": saved, "previous_locale": previous, "changed": True}
 
         return await as_member(members, action)
 

@@ -77,6 +77,9 @@ def _collect(node: dict[str, Any], parts: list[str]) -> None:
     if node_type == "hardBreak":
         parts.append("\n")
         return
+    if node_type == "date":
+        parts.append(str(_attrs(node).get("date") or ""))
+        return
     if node_type == "mention":
         attrs = node.get("attrs") or {}
         parts.append(f"@{attrs.get('label') or attrs.get('id') or ''}")
@@ -121,6 +124,8 @@ def _inline(nodes: list[dict[str, Any]]) -> str:
         elif node_type == "mention":
             attrs = _attrs(node)
             parts.append(f"@{attrs.get('label') or attrs.get('id') or ''}")
+        elif node_type == "date":
+            parts.append(str(_attrs(node).get("date") or ""))
         elif node_type in ("mathInline", "mathBlock"):
             parts.append(f"${_attrs(node).get('text', '')}$")
         elif node_type == "image":

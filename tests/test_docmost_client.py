@@ -168,6 +168,36 @@ async def test_pagination_and_limit_clamp() -> None:
     assert result.items[0].member_role == "admin"
 
 
+async def test_workspace_members_ask_for_all_and_skip_removed() -> None:
+    data = {
+        "items": [
+            {"id": "u1", "email": "a@example.com", "name": "Ann", "role": "member"},
+            {
+                "id": "u2",
+                "email": "b@example.com",
+                "name": "Bob",
+                "role": "member",
+                "deactivatedAt": "2026-11-01T00:00:00Z",
+            },
+            {
+                "id": "u3",
+                "email": "c@example.com",
+                "name": "Cy",
+                "role": "member",
+                "deletedAt": "2026-11-02T00:00:00Z",
+            },
+        ],
+        "meta": {"hasNextPage": False},
+    }
+    mock = Recorder({"/api/workspace/members": ok(data)})
+
+    result = await mock.client().session("t").workspace_members(query="example")
+
+    assert mock.body() == {"limit": 50, "cursor": None, "status": "all", "query": "example"}
+    assert [item.id for item in result.items] == ["u1", "u2"]
+    assert result.items[1].deactivated_at is not None
+
+
 async def test_list_pages_children() -> None:
     mock = Recorder({"/api/pages/sidebar-pages": ok({"items": [], "meta": {}})})
     await mock.client().session("t").list_pages("s1", parent_page_id="p1", limit=0)
@@ -236,7 +266,7 @@ async def test_create_comment_sends_prosemirror_json() -> None:
 
 
 @pytest.mark.parametrize(
-    ("version", "tested"), [("0.80.1", True), ("0.97.0", True), ("0.99.1", False)]
+    ("version", "tested"), [("0.80.1", True), ("0.98.0", True), ("0.99.1", False)]
 )
 async def test_version_supported(version: str, tested: bool) -> None:
     mock = Recorder({"/api/version": ok({"currentVersion": version})})

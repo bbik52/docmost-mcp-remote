@@ -14,7 +14,7 @@ from pydantic import Field
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.documents import markdown_losses
-from docmost_mcp_remote.docmost.models import PageSummary
+from docmost_mcp_remote.docmost.models import PageSummary, SpaceStatus
 from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import find_section, split_sections
@@ -23,6 +23,7 @@ from docmost_mcp_remote.tools.common import (
     as_member,
     formatting_hint,
     page_link,
+    require_known_version,
     require_version,
 )
 from docmost_mcp_remote.tools.spaces import SpacePolicy
@@ -90,9 +91,20 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
         annotations=_READ_ONLY,
         auth=require_scopes("read"),
     )
-    async def list_spaces(cursor: Cursor = None, limit: Limit = 50) -> dict[str, Any]:
+    async def list_spaces(
+        cursor: Cursor = None,
+        limit: Limit = 50,
+        status: Annotated[
+            SpaceStatus,
+            Field(description="Active, archived or all spaces. Archives need Docmost 0.98+."),
+        ] = "active",
+    ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
-            result = await backend.list_spaces(cursor=cursor, limit=limit)
+            if status != "active":
+                await require_known_version(backend, Version(0, 98, 0))
+            result = await backend.list_spaces(
+                cursor=cursor, limit=limit, status=status if status != "active" else None
+            )
             return {
                 "spaces": [
                     {
@@ -101,6 +113,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                         "slug": space.slug,
                         "description": space.description or None,
                         "your_role": space.member_role,
+                        "archived": space.archived_at is not None,
                     }
                     for space in result.items
                     if policy.allows_space(space)
@@ -132,7 +145,9 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "description": space.description or None,
                 "visibility": space.visibility,
                 "member_count": space.member_count,
+                "home_page_id": space.home_page_id,
                 "your_role": space.member_role,
+                "archived": space.archived_at is not None,
                 "created_at": space.created_at.isoformat() if space.created_at else None,
                 "url": f"{docmost_base}/s/{space.slug}" if space.slug else None,
             }
@@ -251,6 +266,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "last_updated_by": found.last_updated_by.name if found.last_updated_by else None,
                 "you_can_edit": found.can_edit,
                 "in_trash": found.deleted_at is not None,
+                "cover": {"photo": found.cover_photo, "position": found.cover_position},
                 "notice": NOTICE,
                 "format": format,
                 "content": wrap(body, source=f"page {found.id}"),
@@ -358,12 +374,23 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             ),
         ] = None,
         created_by_me: Annotated[bool, Field(description="Only pages you created.")] = False,
+        include_archived: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Include archived spaces in global search. Needs Docmost 0.98+; "
+                    "a specific space is searched regardless."
+                )
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         async def action(backend: DocmostBackend) -> dict[str, Any]:
             allowed = await policy.allowed_ids(backend)
             if space_id:
                 policy.ensure(allowed, space_id)
             label_ids: list[str] | None = None
+            if include_archived:
+                await require_known_version(backend, Version(0, 98, 0))
             if title_only or labels:
                 # Older releases silently ignore these filters, so refuse instead.
                 await require_version(backend, SEARCH_FILTERS_SINCE)
@@ -382,6 +409,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 title_only=title_only,
                 label_ids=label_ids,
                 creator_id=creator_id,
+                include_archived=include_archived,
             )
             return {
                 "notice": NOTICE,
@@ -390,7 +418,10 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                         "id": hit.id,
                         "slug_id": hit.slug_id,
                         "title": hit.title or "(untitled)",
-                        "space": hit.space.model_dump() if hit.space else {"id": hit.space_id},
+                        "space": hit.space.model_dump(mode="json", exclude={"archived_at"})
+                        if hit.space
+                        else {"id": hit.space_id},
+                        "archived": bool(hit.space and hit.space.archived_at),
                         "snippet": wrap(
                             _TAGS.sub("", hit.highlight or ""), source=f"page {hit.id}"
                         ),

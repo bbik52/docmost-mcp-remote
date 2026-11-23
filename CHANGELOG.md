@@ -7,6 +7,69 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-23
+
+### Upgrade notes
+
+- No database migrations or required configuration changes. Docmost CE
+  0.80.1 remains the minimum; the new 0.98 capabilities require a verified
+  supporting version. Existing calls keep their previous defaults.
+
+### Added
+
+- Read and set the workspace default language on Docmost 0.98 through
+  admin-scoped tools, without changing existing members' preferences or
+  unrelated workspace settings.
+
+- Add an optional personal message (up to 500 characters) to invitation
+  emails on Docmost 0.98; calls without a message remain compatible.
+
+- Read member profiles with paginated recent pages and spaces filtered by
+  the space allowlist. Update only your own display name, language and time
+  zone through a write-scoped tool with readback verification.
+
+- Read, set and remove page covers on Docmost 0.98 using built-in presets
+  or authorized image attachments (up to 10 MB). Cover changes preserve
+  the page body and verify the saved metadata.
+
+- Set or clear a space home page on Docmost 0.98; require a non-trashed
+  page in that space and verify the saved home page.
+
+- Archive and unarchive spaces on Docmost 0.98 with admin scope,
+  confirmation, allowlist checks and readback verification.
+
+- Resolve and reopen discussion threads on Docmost CE 0.98 with the
+  `write` scope, preserving space and member permissions.
+
+- List and search archived spaces on Docmost 0.98, returning an archive
+  indicator. Space allowlists include permitted archived spaces. Explicit
+  archive filters require a verified supporting version.
+
+### Fixed
+
+- Run pinned-image version regression tests in unit CI even without a live
+  Docmost instance.
+
+- Preserve Docmost 0.98 smart dates in ProseMirror JSON writes, append/prepend
+  edits and snapshots. Report their Markdown loss and reject writes to older
+  or unidentified versions before mutation.
+
+- Find deactivated workspace members on Docmost 0.98 so they can be
+  activated again; omit removed members from lookups.
+
+### Changed
+
+- Test Docmost 0.80.1, 0.97.0 and 0.98.0, plus the non-blocking `latest`
+  canary, following the oldest/previous/newest compatibility policy.
+- Update FastMCP and fastmcp-slim from 4.1.8 to 4.2.3, pydantic-settings
+  from 2.16.2 to 2.16.3 and python-multipart from 0.0.33 to 0.0.34.
+- Update pytest-asyncio to 1.5.0, Ruff to 0.17.6 and setup-uv to 10.4.0.
+
+### Acknowledgements
+
+- Thanks to [osh-labs](https://github.com/osh-labs) for the Docmost 0.98
+  workspace-member compatibility contribution.
+
 ## [1.2.5] - 2026-11-16
 
 ### Upgrade notes

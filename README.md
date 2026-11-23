@@ -49,14 +49,14 @@ Python package directly supports Python 3.12 through 3.15.
   `delete` and `admin` are opt-in per client. Nothing is deleted permanently,
   risky changes ask you first, and an encrypted snapshot of a page is saved
   before every change.
-- 🧰 **62 tools.** Read, search, write by section, comment with @-mentions,
+- 🧰 **72 tools.** Read, search, write by section, comment with @-mentions,
   move, label, export, restore old versions, check a space's health and run
   the workspace: spaces, groups, invitations and roles.
 - 📎 **Files without burning tokens.** The assistant gives you an upload link:
   drop files in the browser, put them in order, and they land in the right
   place of the page.
 - 🐳 **Easy to host.** One container plus Postgres with a ready
-  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.97.
+  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.98.
 
 > ⭐ **If this server is useful to you, please [star the repository](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > It helps other Docmost users find it and tells us the work is worth continuing.
@@ -367,7 +367,7 @@ seven common clients, exact addresses, a multi-client example and setup steps.
 
 ## 🧰 Tools
 
-62 tools in groups. The scope is what a client needs to be granted to see the
+72 tools in groups. The scope is what a client needs to be granted to see the
 tool: `read` is always granted, the others are opt-in.
 
 **Account and spaces**
@@ -491,6 +491,16 @@ tool: `read` is always granted, the others are opt-in.
 | 60 | `change_workspace_role` | admin | Make someone a member, admin or owner of the workspace |
 | 61 | `deactivate_member` | admin | Stop someone from signing in, keeping their account |
 | 62 | `activate_member` | admin | Let a deactivated member sign in again |
+| 63 | `resolve_comment` | write | Close a discussion (Docmost CE 0.98+) |
+| 64 | `reopen_comment` | write | Reopen a discussion (Docmost CE 0.98+) |
+| 65 | `archive_space` | admin | Archive a space (Docmost 0.98+) |
+| 66 | `unarchive_space` | admin | Unarchive a space (Docmost 0.98+) |
+| 67 | `set_space_homepage` | admin | Set a space home page, or reset with `page: null` (Docmost 0.98+) |
+| 68 | `set_page_cover` | write | Set a built-in or attached-image cover; `remove: true` clears it (0.98+) |
+| 69 | `get_member_profile` | read | Profile, recent pages and spaces visible to you (0.98+) |
+| 70 | `update_my_profile` | write | Your display name, language and time zone only (0.98+) |
+| 71 | `get_workspace_language` | admin | Read the workspace default language (0.98+) |
+| 72 | `set_workspace_language` | admin | Set the default language for new members (0.98+) |
 
 People cannot be removed from the workspace or from groups, and groups cannot
 be deleted. Docmost has no way to create an account or edit someone else's
@@ -498,7 +508,41 @@ profile: people join through an invitation and set their own password.
 
 <a id="safety-nets"></a>
 
-### 🛡️ Safety nets
+#
+`resolve_comment(comment_id)` closes a discussion and `reopen_comment(comment_id)`
+opens it again. Both need `write`, a top-level comment id and Docmost CE 0.98+.
+Docmost permissions and `ALLOWED_SPACES` apply.
+
+For a custom cover, use `upload_attachment(add_to_page=false)` and pass the
+returned id as `attachment_id` to `set_page_cover`. The image must belong to
+that page and be at most 10 MB; the server creates Docmost's dedicated cover
+upload. No external image URL is fetched. `position` is 0–100 percent.
+
+`get_member_profile()` reads your profile; give `user` (email, exact name or id)
+for another member. Recent pages and spaces have independent cursors and
+respect `ALLOWED_SPACES`. `update_my_profile` accepts only `name`, `locale` and
+`timezone`; it cannot change another person, credentials or roles.
+
+`invite_people(message="...")` adds a personal note to invitation emails on
+Docmost 0.98+. The message is optional, at most 500 characters; Docmost strips
+links. Calls without `message` keep working on older supported releases.
+
+`get_workspace_language` and `set_workspace_language(locale="...")` need
+`admin` scope and Docmost 0.98+. Updating the workspace default does not
+change existing members' language choices or unrelated settings. The
+write uses confirmation and verifies the saved language.
+
+Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
+`status="all"`, and `search(include_archived=true)` for global search.
+Results expose `archived`; a search scoped to one space includes that
+space even when archived. `ALLOWED_SPACES` still applies to archived data.
+
+Smart dates from Docmost 0.98 are preserved by JSON writes and Markdown
+append/prepend operations. Markdown replacement warns that it would lose
+smart dates; use JSON to keep them. Writing dates requires a verified 0.98+
+backend version.
+
+## 🛡️ Safety nets
 
 - **Snapshots.** Before every body change the server saves the current body
   as a snapshot in its own database, encrypted, for
@@ -577,8 +621,10 @@ Docmost Community Edition **0.80.1 or newer**. Older versions are refused at
 sign-in and on every tool call: they have published security advisories that
 the endpoints this server calls expose (CVE-2026-34212, fixed in 0.71.0, and
 CVE-2026-48073, fixed in 0.80.1). CI runs the integration tests against
-Docmost 0.80.1, 0.96.0 and 0.97.0; newer releases work in most cases and log a warning until they are
-added to the tested range. Docmost users who sign in with SSO only (an
+Docmost 0.80.1, 0.97.0 and 0.98.0: the oldest supported, previous and newest
+tested releases. The Docker tag `latest` is also tested as a non-blocking canary.
+Newer releases work in most cases and log a warning until they are added to
+the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
 password. Labels and backlinks need Docmost 0.90 or newer, and the
 `title_only` and `labels` search filters and `list_attachments` need 0.96 or
@@ -730,7 +776,7 @@ Tests that need Postgres are skipped without `DATABASE_TEST_URL`; for example
 Integration tests run against a real Docmost:
 
 ```sh
-DOCMOST_VERSION=0.97.0 docker compose -f tests/integration/compose.yaml up -d
+DOCMOST_VERSION=0.98.0 docker compose -f tests/integration/compose.yaml up -d
 DOCMOST_TEST_URL=http://localhost:3000 uv run pytest tests/integration
 ```
 

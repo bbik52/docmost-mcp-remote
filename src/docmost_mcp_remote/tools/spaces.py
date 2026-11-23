@@ -30,7 +30,7 @@ class SpacePolicy:
         ids: set[str] = set()
         cursor: str | None = None
         for _ in range(_MAX_SPACE_PAGES):
-            page = await backend.list_spaces(cursor=cursor, limit=100)
+            page = await backend.list_spaces(cursor=cursor, limit=100, status="all")
             ids.update(space.id for space in page.items if self.allows_space(space))
             if not page.has_next_page or not page.next_cursor:
                 break

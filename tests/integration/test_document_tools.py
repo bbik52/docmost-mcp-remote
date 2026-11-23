@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from collections.abc import Iterator
@@ -149,3 +150,46 @@ def test_restore_page_version(server: RunningServer) -> None:
     assert restored["changed"] is True
     stored = _document(server.call(token, "get_page", {"page": page, "format": "json"}))
     assert outline(stored) == outline(RICH)
+
+
+def test_smart_date_json_preservation(server: RunningServer) -> None:
+    if os.environ.get("DOCMOST_VERSION") not in {"0.98.0", "latest"}:
+        pytest.skip("Smart dates need Docmost 0.98+")
+    token = server.token(scopes=("write",), email=MEMBER[0], password=MEMBER[1])
+    general = next(
+        s["id"] for s in server.call(token, "list_spaces")["spaces"] if s["slug"] == "general"
+    )
+    page = server.call(
+        token, "create_page", {"space_id": general, "title": f"Smart date {uuid.uuid4().hex[:8]}"}
+    )["id"]
+    document: dict[str, Any] = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {"type": "text", "text": "Due "},
+                    {"type": "date", "attrs": {"date": "2026-11-23"}},
+                ],
+            }
+        ],
+    }
+    assert server.call(token, "replace_page_json", {"page": page, "document": document})["changed"]
+    stored = _document(server.call(token, "get_page", {"page": page, "format": "json"}))
+    assert outline(stored) == outline(document)
+    document["content"][0]["content"][1]["attrs"]["date"] = "2026-11-24"
+    server.call(token, "replace_page_json", {"page": page, "document": document})
+    assert outline(
+        _document(server.call(token, "get_page", {"page": page, "format": "json"}))
+    ) == outline(document)
+    for operation in ("append", "prepend"):
+        server.call(
+            token, "update_page", {"page": page, "content": operation, "operation": operation}
+        )
+    stored = _document(server.call(token, "get_page", {"page": page, "format": "json"}))
+    assert ("date", "2026-11-24") in outline(stored)
+    assert server.call(token, "get_page", {"page": page})["markdown_loses"] == ["smart dates"]
+    with pytest.raises(ToolError, match="would remove"):
+        server.call(
+            token, "update_page", {"page": page, "content": "replace", "operation": "replace"}
+        )

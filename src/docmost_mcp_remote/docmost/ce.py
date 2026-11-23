@@ -43,14 +43,18 @@ from docmost_mcp_remote.docmost.models import (
     InviteRole,
     Label,
     LinkedPage,
+    Locale,
     Page,
     PageSummary,
     Paginated,
+    ProfilePage,
     SearchHit,
     Space,
     SpaceMember,
     SpaceRole,
+    SpaceStatus,
     Suggestions,
+    UserProfile,
     WorkspaceMember,
     WorkspaceRole,
 )
@@ -337,13 +341,77 @@ class CeDocmostSession:
         reported = data.get("currentVersion") if isinstance(data, dict) else None
         return check_version(str(reported or ""))
 
-    async def list_spaces(self, *, cursor: str | None = None, limit: int = 50) -> Paginated[Space]:
-        data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})
+    async def user_profile(self, user_id: str) -> UserProfile:
+        return UserProfile.model_validate(await self._call("users/info", {"userId": user_id}))
+
+    async def user_recent_pages(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[ProfilePage]:
+        data = await self._call(
+            "users/recent-pages", {"userId": user_id, "cursor": cursor, "limit": _limit(limit)}
+        )
+        return _paginated(data, [ProfilePage.model_validate(item) for item in _items(data)])
+
+    async def user_spaces(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[Space]:
+        data = await self._call(
+            "users/spaces", {"userId": user_id, "cursor": cursor, "limit": _limit(limit)}
+        )
+        return _paginated(data, [Space.from_api(item) for item in _items(data)])
+
+    async def update_own_profile(
+        self,
+        *,
+        name: str | None = None,
+        locale: Locale | None = None,
+        timezone: str | None = None,
+    ) -> None:
+        body = {
+            key: value
+            for key, value in (("name", name), ("locale", locale), ("timezone", timezone))
+            if value is not None
+        }
+        await self._call("users/update", body)
+
+    async def workspace_default_locale(self) -> str:
+        data = await self._call("users/me", {})
+        workspace = data.get("workspace")
+        if not isinstance(workspace, dict):
+            raise DocmostError("Docmost did not return workspace settings")
+        settings = workspace.get("settings") or {}
+        return str(settings.get("defaultLocale") or "en-US")
+
+    async def set_workspace_default_locale(self, locale: Locale) -> None:
+        await self._call("workspace/update", {"defaultLocale": locale})
+
+    async def list_spaces(
+        self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
+    ) -> Paginated[Space]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if status is not None:
+            body["status"] = status
+        data = await self._call("spaces", body)
         return _paginated(data, [Space.from_api(item) for item in _items(data)])
 
     async def get_space(self, space_id: str) -> Space:
         data = await self._call("spaces/info", {"spaceId": space_id})
         return Space.from_api(data)
+
+    async def set_space_archived(self, space_id: str, archived: bool) -> None:
+        path = "spaces/archive" if archived else "spaces/unarchive"
+        await self._call(path, {"spaceId": space_id})
+
+    async def set_space_homepage(self, space_id: str, page_id: str | None) -> None:
+        await self._call("spaces/update", {"spaceId": space_id, "homePageId": page_id})
 
     async def create_space(self, name: str, slug: str, *, description: str | None = None) -> Space:
         body: dict[str, Any] = {"name": name, "slug": slug}
@@ -401,11 +469,16 @@ class CeDocmostSession:
     async def workspace_members(
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[WorkspaceMember]:
-        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        # Docmost 0.98 lists active members only unless asked for "all"; older releases
+        # list active and deactivated members and ignore the unknown field. Either way the
+        # caller gets both, so deactivated people can be found and activated again.
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor, "status": "all"}
         if query:
             body["query"] = query
         data = await self._call("workspace/members", body)
-        return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+        members = [WorkspaceMember.model_validate(item) for item in _items(data)]
+        # "all" in 0.98 also returns removed people; no release listed them before.
+        return _paginated(data, [member for member in members if member.deleted_at is None])
 
     async def suggest(
         self,
@@ -478,10 +551,18 @@ class CeDocmostSession:
         data = await self._call("workspace/invites", body)
         return _paginated(data, [Invitation.model_validate(item) for item in _items(data)])
 
-    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None:
-        await self._call(
-            "workspace/invites/create", {"emails": emails, "role": role, "groupIds": group_ids}
-        )
+    async def invite(
+        self,
+        emails: list[str],
+        role: InviteRole,
+        group_ids: list[str],
+        *,
+        message: str | None = None,
+    ) -> None:
+        body: dict[str, Any] = {"emails": emails, "role": role, "groupIds": group_ids}
+        if message is not None:
+            body["message"] = message
+        await self._call("workspace/invites/create", body)
 
     async def resend_invitation(self, invitation_id: str) -> None:
         await self._call("workspace/invites/resend", {"invitationId": invitation_id})
@@ -564,6 +645,7 @@ class CeDocmostSession:
         title_only: bool = False,
         label_ids: list[str] | None = None,
         creator_id: str | None = None,
+        include_archived: bool = False,
     ) -> list[SearchHit]:
         body: dict[str, Any] = {"query": query, "limit": _limit(limit)}
         if space_id:
@@ -574,6 +656,8 @@ class CeDocmostSession:
             body["labelIds"] = label_ids
         if creator_id:
             body["creatorId"] = creator_id
+        if include_archived:
+            body["includeArchived"] = True
         data = await self._call("search", body)
         return [SearchHit.from_api(item) for item in _items(data)][: _limit(limit)]
 
@@ -676,6 +760,22 @@ class CeDocmostSession:
         data = await self._call("pages/duplicate", body)
         return CopiedPage.model_validate(data)
 
+    async def set_page_cover(
+        self,
+        page_id: str,
+        photo: str | None,
+        position: float | None,
+    ) -> None:
+        await self._call(
+            "pages/update",
+            {
+                "pageId": page_id,
+                "coverPhoto": photo,
+                "coverPosition": position,
+                "coverAttribution": None,
+            },
+        )
+
     async def get_comment(self, comment_id: str) -> Comment:
         data = await self._call("comments/info", {"commentId": comment_id})
         return Comment.from_api(data)
@@ -693,6 +793,10 @@ class CeDocmostSession:
         if parent_comment_id:
             body["parentCommentId"] = parent_comment_id
         data = await self._call("comments/create", body)
+        return Comment.from_api(data)
+
+    async def set_comment_resolved(self, comment_id: str, resolved: bool) -> Comment:
+        data = await self._call("comments/resolve", {"commentId": comment_id, "resolved": resolved})
         return Comment.from_api(data)
 
     async def update_comment(self, comment_id: str, text: str) -> Comment:
@@ -755,6 +859,21 @@ class CeDocmostSession:
     async def download_attachment(self, attachment_id: str, file_name: str) -> Download:
         path = f"files/{quote(attachment_id, safe='')}/{quote(file_name, safe='')}"
         return await self._client.open("GET", path, self._token)
+
+    async def upload_page_cover(
+        self,
+        page_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> Attachment:
+        data = await self._client.call(
+            "files/upload",
+            {"pageId": page_id, "type": "page-cover"},
+            self._token,
+            files={"file": (file_name, content, mime_type)},
+        )
+        return Attachment.model_validate(data)
 
     async def upload_attachment(
         self, page_id: str, file_name: str, content: bytes, mime_type: str
