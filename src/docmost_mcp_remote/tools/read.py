@@ -266,6 +266,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "last_updated_by": found.last_updated_by.name if found.last_updated_by else None,
                 "you_can_edit": found.can_edit,
                 "in_trash": found.deleted_at is not None,
+                "cover": {"photo": found.cover_photo, "position": found.cover_position},
                 "notice": NOTICE,
                 "format": format,
                 "content": wrap(body, source=f"page {found.id}"),

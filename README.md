@@ -49,7 +49,7 @@ Python package directly supports Python 3.12 through 3.15.
   `delete` and `admin` are opt-in per client. Nothing is deleted permanently,
   risky changes ask you first, and an encrypted snapshot of a page is saved
   before every change.
-- 🧰 **67 tools.** Read, search, write by section, comment with @-mentions,
+- 🧰 **68 tools.** Read, search, write by section, comment with @-mentions,
   move, label, export, restore old versions, check a space's health and run
   the workspace: spaces, groups, invitations and roles.
 - 📎 **Files without burning tokens.** The assistant gives you an upload link:
@@ -367,7 +367,7 @@ seven common clients, exact addresses, a multi-client example and setup steps.
 
 ## 🧰 Tools
 
-67 tools in groups. The scope is what a client needs to be granted to see the
+68 tools in groups. The scope is what a client needs to be granted to see the
 tool: `read` is always granted, the others are opt-in.
 
 **Account and spaces**
@@ -496,6 +496,7 @@ tool: `read` is always granted, the others are opt-in.
 | 65 | `archive_space` | admin | Archive a space (Docmost 0.98+) |
 | 66 | `unarchive_space` | admin | Unarchive a space (Docmost 0.98+) |
 | 67 | `set_space_homepage` | admin | Set a space home page, or reset with `page: null` (Docmost 0.98+) |
+| 68 | `set_page_cover` | write | Set a built-in or attached-image cover; `remove: true` clears it (0.98+) |
 
 People cannot be removed from the workspace or from groups, and groups cannot
 be deleted. Docmost has no way to create an account or edit someone else's
@@ -507,6 +508,11 @@ profile: people join through an invitation and set their own password.
 `resolve_comment(comment_id)` closes a discussion and `reopen_comment(comment_id)`
 opens it again. Both need `write`, a top-level comment id and Docmost CE 0.98+.
 Docmost permissions and `ALLOWED_SPACES` apply.
+
+For a custom cover, use `upload_attachment(add_to_page=false)` and pass the
+returned id as `attachment_id` to `set_page_cover`. The image must belong to
+that page and be at most 10 MB; the server creates Docmost's dedicated cover
+upload. No external image URL is fetched. `position` is 0–100 percent.
 
 Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
 `status="all"`, and `search(include_archived=true)` for global search.

@@ -144,6 +144,9 @@ class PageSummary(_PageBase):
 class Page(_PageBase):
     """A single page with its body as Markdown."""
 
+    cover_photo: str | None = Field(default=None, alias="coverPhoto")
+    cover_position: float | None = Field(default=None, alias="coverPosition")
+
     content: str = ""
     created_at: datetime | None = Field(default=None, alias="createdAt")
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
@@ -299,3 +302,31 @@ WorkspaceRole = Literal["owner", "admin", "member"]
 InviteRole = Literal["admin", "member"]
 
 SpaceStatus = Literal["active", "archived", "all"]
+
+# Preset identifiers observed through Docmost 0.98 gallery requests.
+CoverPreset = Literal[
+    "color-red",
+    "color-orange",
+    "color-yellow",
+    "color-green",
+    "color-teal",
+    "color-blue",
+    "color-purple",
+    "color-graphite",
+    "gradient-aurora",
+    "gradient-sunset",
+    "gradient-sky",
+    "gradient-dune",
+    "gradient-forest",
+    "gradient-dusk",
+    "gradient-berry",
+    "gradient-slate",
+    "texture-split-slate",
+    "texture-northern-lights",
+    "texture-linen",
+    "texture-terrazzo",
+    "texture-graph",
+    "texture-topography",
+    "texture-blueprint",
+    "texture-waves",
+]

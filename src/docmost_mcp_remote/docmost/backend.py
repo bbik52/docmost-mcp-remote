@@ -226,6 +226,13 @@ class DocmostBackend(Protocol):
 
     async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage: ...
 
+    async def set_page_cover(
+        self,
+        page_id: str,
+        photo: str | None,
+        position: float | None,
+    ) -> None: ...
+
     async def get_comment(self, comment_id: str) -> Comment: ...
 
     async def create_comment(
@@ -273,6 +280,14 @@ class DocmostBackend(Protocol):
     ) -> Paginated[Attachment]: ...
 
     async def download_attachment(self, attachment_id: str, file_name: str) -> Download: ...
+
+    async def upload_page_cover(
+        self,
+        page_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> Attachment: ...
 
     async def upload_attachment(
         self, page_id: str, file_name: str, content: bytes, mime_type: str

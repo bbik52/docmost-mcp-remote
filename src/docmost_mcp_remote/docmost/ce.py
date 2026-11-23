@@ -697,6 +697,22 @@ class CeDocmostSession:
         data = await self._call("pages/duplicate", body)
         return CopiedPage.model_validate(data)
 
+    async def set_page_cover(
+        self,
+        page_id: str,
+        photo: str | None,
+        position: float | None,
+    ) -> None:
+        await self._call(
+            "pages/update",
+            {
+                "pageId": page_id,
+                "coverPhoto": photo,
+                "coverPosition": position,
+                "coverAttribution": None,
+            },
+        )
+
     async def get_comment(self, comment_id: str) -> Comment:
         data = await self._call("comments/info", {"commentId": comment_id})
         return Comment.from_api(data)
@@ -780,6 +796,21 @@ class CeDocmostSession:
     async def download_attachment(self, attachment_id: str, file_name: str) -> Download:
         path = f"files/{quote(attachment_id, safe='')}/{quote(file_name, safe='')}"
         return await self._client.open("GET", path, self._token)
+
+    async def upload_page_cover(
+        self,
+        page_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> Attachment:
+        data = await self._client.call(
+            "files/upload",
+            {"pageId": page_id, "type": "page-cover"},
+            self._token,
+            files={"file": (file_name, content, mime_type)},
+        )
+        return Attachment.model_validate(data)
 
     async def upload_attachment(
         self, page_id: str, file_name: str, content: bytes, mime_type: str
