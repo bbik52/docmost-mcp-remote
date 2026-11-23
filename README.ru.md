@@ -519,6 +519,10 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 ограничение `ALLOWED_SPACES` сохраняется. `update_my_profile` меняет только
 свои `name`, `locale` и `timezone`, не чужие данные, учётные данные или роли.
 
+`invite_people(message="...")` добавляет личное сообщение в приглашение
+на Docmost 0.98+. Необязательный текст ограничен 500 символами; Docmost убирает
+ссылки. Вызовы без `message` работают на прежних поддерживаемых версиях.
+
 Архивные пространства (Docmost 0.98+): используйте `list_spaces(status="archived")`
 или `status="all"` и `search(include_archived=true)` для глобального поиска.
 Результаты содержат признак `archived`. Поиск в конкретном пространстве

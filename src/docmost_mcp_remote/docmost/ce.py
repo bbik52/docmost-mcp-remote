@@ -540,10 +540,18 @@ class CeDocmostSession:
         data = await self._call("workspace/invites", body)
         return _paginated(data, [Invitation.model_validate(item) for item in _items(data)])
 
-    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None:
-        await self._call(
-            "workspace/invites/create", {"emails": emails, "role": role, "groupIds": group_ids}
-        )
+    async def invite(
+        self,
+        emails: list[str],
+        role: InviteRole,
+        group_ids: list[str],
+        *,
+        message: str | None = None,
+    ) -> None:
+        body: dict[str, Any] = {"emails": emails, "role": role, "groupIds": group_ids}
+        if message is not None:
+            body["message"] = message
+        await self._call("workspace/invites/create", body)
 
     async def resend_invitation(self, invitation_id: str) -> None:
         await self._call("workspace/invites/resend", {"invitationId": invitation_id})

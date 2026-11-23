@@ -193,7 +193,14 @@ class DocmostBackend(Protocol):
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Invitation]: ...
 
-    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None: ...
+    async def invite(
+        self,
+        emails: list[str],
+        role: InviteRole,
+        group_ids: list[str],
+        *,
+        message: str | None = None,
+    ) -> None: ...
 
     async def resend_invitation(self, invitation_id: str) -> None: ...
 

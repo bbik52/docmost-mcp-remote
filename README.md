@@ -521,6 +521,10 @@ for another member. Recent pages and spaces have independent cursors and
 respect `ALLOWED_SPACES`. `update_my_profile` accepts only `name`, `locale` and
 `timezone`; it cannot change another person, credentials or roles.
 
+`invite_people(message="...")` adds a personal note to invitation emails on
+Docmost 0.98+. The message is optional, at most 500 characters; Docmost strips
+links. Calls without `message` keep working on older supported releases.
+
 Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
 `status="all"`, and `search(include_archived=true)` for global search.
 Results expose `archived`; a search scoped to one space includes that
