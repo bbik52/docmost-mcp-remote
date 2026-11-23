@@ -9,6 +9,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- Archive and unarchive spaces on Docmost 0.98 with admin scope,
+  confirmation, allowlist checks and readback verification.
+
 - Resolve and reopen discussion threads on Docmost CE 0.98 with the
   `write` scope, preserving space and member permissions.
 

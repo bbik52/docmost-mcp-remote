@@ -20,8 +20,9 @@ from pydantic import Field
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import Group, Space, SpaceRole, WorkspaceMember
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
-from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.common import as_member, require_known_version
 from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit
 from docmost_mcp_remote.tools.spaces import SpacePolicy
@@ -255,6 +256,51 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             return _space(space, docmost_base)
 
         return await as_member(members, action)
+
+    async def change_archive(
+        space_id: str, archived: bool
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            await require_known_version(backend, Version(0, 98, 0))
+            await policy.check(backend, space_id)
+            space = await backend.get_space(space_id)
+            if (space.archived_at is not None) == archived:
+                return {"id": space.id, "archived": archived, "changed": False}
+            verb = "Archive" if archived else "Unarchive"
+            asked = await confirm(f"{verb} the Docmost space {named(space.name)}?")
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
+            await backend.set_space_archived(space.id, archived)
+            updated = await backend.get_space(space.id)
+            if (updated.archived_at is not None) != archived:
+                raise ToolError("Docmost did not confirm the requested archive status.")
+            return {"id": space.id, "archived": archived, "changed": True}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="archive_space",
+        description=(
+            "Archive a space to hide it from active lists and global search. Reversible; "
+            "needs Docmost 0.98+ and space admin rights."
+        ),
+        annotations={**_ADMIN, "destructiveHint": True},
+        auth=require_scopes("admin"),
+    )
+    async def archive_space(space_id: SpaceId) -> dict[str, Any] | mt.InputRequiredResult:
+        return await change_archive(space_id, True)
+
+    @mcp.tool(
+        name="unarchive_space",
+        description=(
+            "Restore an archived space to active lists and search. "
+            "Needs Docmost 0.98+ and space admin rights."
+        ),
+        annotations=_ADMIN,
+        auth=require_scopes("admin"),
+    )
+    async def unarchive_space(space_id: SpaceId) -> dict[str, Any] | mt.InputRequiredResult:
+        return await change_archive(space_id, False)
 
     @mcp.tool(
         name="add_space_members",

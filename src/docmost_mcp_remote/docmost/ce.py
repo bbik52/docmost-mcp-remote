@@ -351,6 +351,10 @@ class CeDocmostSession:
         data = await self._call("spaces/info", {"spaceId": space_id})
         return Space.from_api(data)
 
+    async def set_space_archived(self, space_id: str, archived: bool) -> None:
+        path = "spaces/archive" if archived else "spaces/unarchive"
+        await self._call(path, {"spaceId": space_id})
+
     async def create_space(self, name: str, slug: str, *, description: str | None = None) -> Space:
         body: dict[str, Any] = {"name": name, "slug": slug}
         if description is not None:
