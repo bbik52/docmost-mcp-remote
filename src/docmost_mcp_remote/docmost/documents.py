@@ -9,6 +9,7 @@ stored afterwards.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from functools import cache
 from typing import Any
 
@@ -21,7 +22,7 @@ _TRANSCLUDED = (
     " | taskList | image | video | audio | attachment | callout | details | embed | mathBlock"
     " | table | drawio | excalidraw | pdf | subpages | columns | youtube)+"
 )
-#: Content expression and groups of each node type in Docmost 0.97's editor
+#: Content expression and groups of each node type in Docmost 0.98's CE editor
 #: schema, read from Docmost with ``getSchema(tiptapExtensions)``. Older
 #: releases know fewer types; the comparison after a write catches those.
 NODE_SCHEMA: dict[str, tuple[str, str]] = {
@@ -40,6 +41,7 @@ NODE_SCHEMA: dict[str, tuple[str, str]] = {
     "taskList": ("taskItem+", "block list"),
     "taskItem": ("paragraph block*", ""),
     "mathInline": ("", "inline"),
+    "date": ("", "inline"),
     "mathBlock": ("", "block"),
     "details": ("detailsSummary detailsContent", "block"),
     "detailsContent": ("block*", "block"),
@@ -135,6 +137,14 @@ def check_document(doc: Any) -> list[str]:
         attrs = node.get("attrs")
         if attrs is not None and not isinstance(attrs, dict):
             problems.append(f"{path}.attrs: must be an object.")
+        if kind == "date" and isinstance(attrs, dict) and attrs.get("date") is not None:
+            value = attrs["date"]
+            try:
+                if not isinstance(value, str):
+                    raise ValueError
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                problems.append(f"{path}.attrs.date: must be an ISO date or datetime string.")
         marks = node.get("marks")
         if marks is not None:
             if not isinstance(marks, list):
@@ -181,8 +191,9 @@ def check_document(doc: Any) -> list[str]:
 def outline(doc: Any) -> list[tuple[str, str]]:
     """Node types in document order, each with the text directly inside it.
 
-    Attributes and marks are left out: Docmost adds defaults to both. Two
-    documents with the same outline hold the same nodes and text.
+    Formatting attributes and marks are left out: Docmost adds defaults to
+    both. Smart dates retain their date value because it carries content.
+    Two documents with the same outline hold the same nodes and text.
     """
     found: list[tuple[str, str]] = []
 
@@ -196,6 +207,10 @@ def outline(doc: Any) -> list[tuple[str, str]]:
             for child in children
             if isinstance(child, dict) and child.get("type") == "text"
         )
+        if node.get("type") == "date":
+            raw = node.get("attrs")
+            attrs = raw if isinstance(raw, dict) else {}
+            text = str(attrs.get("date") or "")
         found.append((str(node.get("type")), text))
         for child in children:
             visit(child)
@@ -222,6 +237,7 @@ _MARKDOWN_SAFE_MARKS = frozenset(
     {"bold", "italic", "strike", "code", "link", "superscript", "subscript"}
 )
 _LOST_NODES = {
+    "date": "smart dates",
     "columns": "columns",
     "column": "columns",
     "tabs": "tabs",

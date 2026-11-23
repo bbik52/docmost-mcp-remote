@@ -10,7 +10,9 @@ from fastmcp.exceptions import ToolError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
+from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, doc_to_text
 from docmost_mcp_remote.tools import write
+from tests.fakes import ok
 from tests.harness import RunningServer
 from tests.test_write_tools import FakeDocmost
 
@@ -260,3 +262,57 @@ def test_markdown_replace_keeps_formatting(
     server.call(token, "update_page", {"page": "p1", "content": "More", "operation": "append"})
     server.call(token, "update_page", {**replace, "drop_formatting": True})
     assert docmost.pages["p1"]["content"] == "New"
+
+
+SMART_DATE = _doc(
+    {
+        "type": "paragraph",
+        "content": [
+            {"type": "text", "text": "Due "},
+            {"type": "date", "attrs": {"date": "2026-11-23"}},
+        ],
+    }
+)
+
+
+def test_smart_date_schema_rendering_and_semantic_outline() -> None:
+    assert check_document(SMART_DATE) == []
+    assert "2026-11-23" in doc_to_markdown(SMART_DATE)
+    assert "2026-11-23" in doc_to_text(SMART_DATE)
+    assert markdown_losses(SMART_DATE) == ["smart dates"]
+    changed = json.loads(json.dumps(SMART_DATE))
+    changed["content"][0]["content"][1]["attrs"]["date"] = "2026-11-24"
+    assert outline(changed) != outline(SMART_DATE)
+
+
+@pytest.mark.parametrize("value", [42, "not-a-date"])
+def test_invalid_smart_date_is_rejected(value: object) -> None:
+    doc = json.loads(json.dumps(SMART_DATE))
+    doc["content"][0]["content"][1]["attrs"]["date"] = value
+    assert any("ISO date" in problem for problem in check_document(doc))
+
+
+@pytest.mark.parametrize("version", ["0.97.0", ""])
+def test_smart_date_does_not_write_to_unsupported_docmost(
+    server: RunningServer,
+    docmost: FakeDocmost,
+    version: str,
+) -> None:
+    docmost.recorder.routes["/api/version"] = ok({"currentVersion": version})
+    token = server.token(scopes=("write",))
+    preview = server.call(
+        token, "replace_page_json", {"page": "p1", "document": SMART_DATE, "dry_run": True}
+    )
+    assert preview["problems"]
+    with pytest.raises(ToolError, match=r"0\.98\.0"):
+        server.call(token, "replace_page_json", {"page": "p1", "document": SMART_DATE})
+    assert not any(r.url.path == "/api/pages/update" for r in docmost.recorder.requests)
+
+
+def test_smart_date_json_roundtrip(server: RunningServer, docmost: FakeDocmost) -> None:
+    docmost.recorder.routes["/api/version"] = ok({"currentVersion": "0.98.0"})
+    result = server.call(
+        server.token(scopes=("write",)), "replace_page_json", {"page": "p1", "document": SMART_DATE}
+    )
+    assert result["changed"]
+    assert outline(docmost.pages["p1"]["document"]) == outline(SMART_DATE)

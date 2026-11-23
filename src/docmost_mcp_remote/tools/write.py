@@ -138,6 +138,12 @@ async def check_not_busy(members: MemberService, member_id: uuid.UUID, page: Pag
     )
 
 
+async def check_document_version(backend: DocmostBackend, document: dict[str, Any]) -> None:
+    """Do not send new node types to releases that would silently drop them."""
+    if any(kind == "date" for kind, _ in outline(document)):
+        await require_known_version(backend, Version(0, 98, 0))
+
+
 async def write_document(
     backend: DocmostBackend,
     snapshots: SnapshotStore,
@@ -158,6 +164,7 @@ async def write_document(
         raise ToolError("The document was not written: " + " ".join(problems))
     if len(json.dumps(document)) > MAX_JSON_CHARS:
         raise ToolError(f"The document is larger than {MAX_JSON_CHARS} characters of JSON.")
+    await check_document_version(backend, document)
     await check_not_busy(members, member_id, page)
     current = await backend.get_page_json(page.id)
     snapshot_id = await snapshots.save(
@@ -470,6 +477,11 @@ def register(
             found = await load_page(backend, page)
             if dry_run:
                 problems = check_document(document)
+                if not problems:
+                    try:
+                        await check_document_version(backend, document)
+                    except ToolError as exc:
+                        problems.append(str(exc))
                 current = doc_to_markdown(await backend.get_page_json(found.id))
                 proposed = "" if problems else doc_to_markdown(document)
                 diff, truncated = unified_diff(current, proposed, limit=MAX_DIFF_CHARS)
