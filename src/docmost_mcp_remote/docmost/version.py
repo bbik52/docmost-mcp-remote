@@ -34,7 +34,7 @@ def parse_version(text: str) -> Version:
 #: by a forged attachment id (CVE-2026-48073).
 MIN_SUPPORTED = Version(0, 80, 1)
 #: Newest release the integration tests run against.
-MAX_TESTED = Version(0, 97, 0)
+MAX_TESTED = Version(0, 98, 0)
 
 
 class VersionCheck(NamedTuple):

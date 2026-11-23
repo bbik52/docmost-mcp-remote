@@ -26,14 +26,18 @@ from docmost_mcp_remote.docmost.models import (
     InviteRole,
     Label,
     LinkedPage,
+    Locale,
     Page,
     PageSummary,
     Paginated,
+    ProfilePage,
     SearchHit,
     Space,
     SpaceMember,
     SpaceRole,
+    SpaceStatus,
     Suggestions,
+    UserProfile,
     WorkspaceMember,
     WorkspaceRole,
 )
@@ -45,8 +49,38 @@ class DocmostBackend(Protocol):
 
     async def version(self) -> VersionCheck: ...
 
+    async def user_profile(self, user_id: str) -> UserProfile: ...
+
+    async def user_recent_pages(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[ProfilePage]: ...
+
+    async def user_spaces(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[Space]: ...
+
+    async def update_own_profile(
+        self,
+        *,
+        name: str | None = None,
+        locale: Locale | None = None,
+        timezone: str | None = None,
+    ) -> None: ...
+
+    async def workspace_default_locale(self) -> str: ...
+
+    async def set_workspace_default_locale(self, locale: Locale) -> None: ...
+
     async def list_spaces(
-        self, *, cursor: str | None = None, limit: int = 50
+        self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
     ) -> Paginated[Space]: ...
 
     async def get_space(self, space_id: str) -> Space: ...
@@ -91,6 +125,7 @@ class DocmostBackend(Protocol):
         title_only: bool = False,
         label_ids: list[str] | None = None,
         creator_id: str | None = None,
+        include_archived: bool = False,
     ) -> list[SearchHit]: ...
 
     async def backlinks(
@@ -101,6 +136,10 @@ class DocmostBackend(Protocol):
         cursor: str | None = None,
         limit: int = 50,
     ) -> Paginated[LinkedPage]: ...
+
+    async def set_space_archived(self, space_id: str, archived: bool) -> None: ...
+
+    async def set_space_homepage(self, space_id: str, page_id: str | None) -> None: ...
 
     async def create_space(
         self, name: str, slug: str, *, description: str | None = None
@@ -158,7 +197,14 @@ class DocmostBackend(Protocol):
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[Invitation]: ...
 
-    async def invite(self, emails: list[str], role: InviteRole, group_ids: list[str]) -> None: ...
+    async def invite(
+        self,
+        emails: list[str],
+        role: InviteRole,
+        group_ids: list[str],
+        *,
+        message: str | None = None,
+    ) -> None: ...
 
     async def resend_invitation(self, invitation_id: str) -> None: ...
 
@@ -220,6 +266,13 @@ class DocmostBackend(Protocol):
 
     async def duplicate_page(self, page_id: str, *, space_id: str | None = None) -> CopiedPage: ...
 
+    async def set_page_cover(
+        self,
+        page_id: str,
+        photo: str | None,
+        position: float | None,
+    ) -> None: ...
+
     async def get_comment(self, comment_id: str) -> Comment: ...
 
     async def create_comment(
@@ -230,6 +283,8 @@ class DocmostBackend(Protocol):
         parent_comment_id: str | None = None,
         mentions: list[dict[str, Any]] | None = None,
     ) -> Comment: ...
+
+    async def set_comment_resolved(self, comment_id: str, resolved: bool) -> Comment: ...
 
     async def update_comment(self, comment_id: str, text: str) -> Comment: ...
 
@@ -265,6 +320,14 @@ class DocmostBackend(Protocol):
     ) -> Paginated[Attachment]: ...
 
     async def download_attachment(self, attachment_id: str, file_name: str) -> Download: ...
+
+    async def upload_page_cover(
+        self,
+        page_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> Attachment: ...
 
     async def upload_attachment(
         self, page_id: str, file_name: str, content: bytes, mime_type: str

@@ -26,9 +26,17 @@ from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.db.snapshot_store import SnapshotStore
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.documents import check_document, markdown_losses, outline
-from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary, WorkspaceMember
+from docmost_mcp_remote.docmost.models import (
+    BodyOperation,
+    CoverPreset,
+    Page,
+    PageSummary,
+    WorkspaceMember,
+)
+from docmost_mcp_remote.docmost.placement import file_node
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, mention_node
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import (
     apply_operation,
@@ -37,7 +45,12 @@ from docmost_mcp_remote.sections import (
     replace_section,
     unified_diff,
 )
-from docmost_mcp_remote.tools.common import as_member, formatting_hint, page_link
+from docmost_mcp_remote.tools.common import (
+    as_member,
+    formatting_hint,
+    page_link,
+    require_known_version,
+)
 from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
@@ -125,6 +138,12 @@ async def check_not_busy(members: MemberService, member_id: uuid.UUID, page: Pag
     )
 
 
+async def check_document_version(backend: DocmostBackend, document: dict[str, Any]) -> None:
+    """Do not send new node types to releases that would silently drop them."""
+    if any(kind == "date" for kind, _ in outline(document)):
+        await require_known_version(backend, Version(0, 98, 0))
+
+
 async def write_document(
     backend: DocmostBackend,
     snapshots: SnapshotStore,
@@ -145,6 +164,7 @@ async def write_document(
         raise ToolError("The document was not written: " + " ".join(problems))
     if len(json.dumps(document)) > MAX_JSON_CHARS:
         raise ToolError(f"The document is larger than {MAX_JSON_CHARS} characters of JSON.")
+    await check_document_version(backend, document)
     await check_not_busy(members, member_id, page)
     current = await backend.get_page_json(page.id)
     snapshot_id = await snapshots.save(
@@ -457,6 +477,11 @@ def register(
             found = await load_page(backend, page)
             if dry_run:
                 problems = check_document(document)
+                if not problems:
+                    try:
+                        await check_document_version(backend, document)
+                    except ToolError as exc:
+                        problems.append(str(exc))
                 current = doc_to_markdown(await backend.get_page_json(found.id))
                 proposed = "" if problems else doc_to_markdown(document)
                 diff, truncated = unified_diff(current, proposed, limit=MAX_DIFF_CHARS)
@@ -771,6 +796,103 @@ def register(
             }
 
         return await as_member(members, action)
+
+    @mcp.tool(
+        name="set_page_cover",
+        description=(
+            "Set a page cover from a built-in preset or an image attachment of that "
+            "page; remove=true clears it. Exactly one choice is required. Changes only "
+            "metadata, keeping the body intact. Needs Docmost 0.98+."
+        ),
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def set_page_cover(
+        page: PageRef,
+        preset: Annotated[
+            CoverPreset | None, Field(description="Built-in color, gradient or texture.")
+        ] = None,
+        attachment_id: Annotated[
+            str | None, Field(description="Image attachment id belonging to this page.")
+        ] = None,
+        remove: Annotated[bool, Field(description="Remove the cover.")] = False,
+        position: Annotated[
+            float, Field(ge=0, le=100, description="Vertical position, 0 to 100 percent.")
+        ] = 50,
+    ) -> dict[str, Any]:
+        if sum((preset is not None, attachment_id is not None, remove)) != 1:
+            raise ToolError("Choose exactly one of preset, attachment_id or remove=true.")
+
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            found = await backend.get_page(page_ref(page))
+            await policy.check(backend, found.space_id)
+            photo = f"preset:{preset}" if preset is not None else None
+            if attachment_id is not None:
+                item = await backend.attachment_info(attachment_id)
+                if item.page_id != found.id or not (item.mime_type or "").startswith("image/"):
+                    raise ToolError("The cover must be an image attachment belonging to this page.")
+                # Docmost requires a page-cover upload, not a normal file attachment.
+                # Read only the authorized local attachment; never fetch a caller URL.
+                download = await backend.download_attachment(item.id, item.file_name)
+                content = await download.read(10 * 1024 * 1024)
+                cover = await backend.upload_page_cover(
+                    found.id, item.file_name, content, item.mime_type or "image/png"
+                )
+                photo = str(file_node(cover)["attrs"]["src"])
+            previous = {"photo": found.cover_photo, "position": found.cover_position}
+            new_position = None if remove else position
+            changed = found.cover_photo != photo or found.cover_position != new_position
+            if changed:
+                await backend.set_page_cover(found.id, photo, new_position)
+                updated = await backend.get_page(found.id)
+                if updated.cover_photo != photo or updated.cover_position != new_position:
+                    raise ToolError("Docmost did not confirm the requested page cover.")
+            return {
+                "id": found.id,
+                "cover": {"photo": photo, "position": new_position},
+                "previous_cover": previous,
+                "changed": changed,
+            }
+
+        return await as_member(members, action)
+
+    async def change_comment_resolution(comment_id: str, resolved: bool) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            comment = await backend.get_comment(comment_id)
+            if comment.parent_comment_id:
+                raise ToolError("Use the top-level comment id to resolve or reopen a discussion.")
+            space_id = comment.space_id or (await backend.get_page(comment.page_id)).space_id
+            await policy.check(backend, space_id)
+            updated = await backend.set_comment_resolved(comment.id, resolved)
+            if (updated.resolved_at is not None) != resolved:
+                raise ToolError("Docmost did not confirm the requested discussion status.")
+            return {"id": updated.id, "page_id": updated.page_id, "resolved": resolved}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="resolve_comment",
+        description="Close a discussion using its top-level comment id. Needs Docmost CE 0.98+.",
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def resolve_comment(
+        comment_id: Annotated[str, Field(description="Top-level comment id from list_comments.")],
+    ) -> dict[str, Any]:
+        return await change_comment_resolution(comment_id, True)
+
+    @mcp.tool(
+        name="reopen_comment",
+        description="Reopen a resolved discussion using its top-level comment id. Needs CE 0.98+.",
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def reopen_comment(
+        comment_id: Annotated[str, Field(description="Top-level comment id from list_comments.")],
+    ) -> dict[str, Any]:
+        return await change_comment_resolution(comment_id, False)
 
     @mcp.tool(
         name="list_trash",

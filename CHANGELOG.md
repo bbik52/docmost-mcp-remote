@@ -7,6 +7,49 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Added
+
+- Read and set the workspace default language on Docmost 0.98 through
+  admin-scoped tools, without changing existing members' preferences or
+  unrelated workspace settings.
+
+- Add an optional personal message (up to 500 characters) to invitation
+  emails on Docmost 0.98; calls without a message remain compatible.
+
+- Read member profiles with paginated recent pages and spaces filtered by
+  the space allowlist. Update only your own display name, language and time
+  zone through a write-scoped tool with readback verification.
+
+- Read, set and remove page covers on Docmost 0.98 using built-in presets
+  or authorized image attachments (up to 10 MB). Cover changes preserve
+  the page body and verify the saved metadata.
+
+- Set or clear a space home page on Docmost 0.98; require a non-trashed
+  page in that space and verify the saved home page.
+
+- Archive and unarchive spaces on Docmost 0.98 with admin scope,
+  confirmation, allowlist checks and readback verification.
+
+- Resolve and reopen discussion threads on Docmost CE 0.98 with the
+  `write` scope, preserving space and member permissions.
+
+- List and search archived spaces on Docmost 0.98, returning an archive
+  indicator. Space allowlists include permitted archived spaces. Explicit
+  archive filters require a verified supporting version.
+
+### Fixed
+
+- Preserve Docmost 0.98 smart dates in ProseMirror JSON writes, append/prepend
+  edits and snapshots. Report their Markdown loss and reject writes to older
+  or unidentified versions before mutation.
+
+- Find deactivated workspace members on Docmost 0.98 so they can be
+  activated again; omit removed members from lookups.
+
+### Changed
+
+- Add Docmost 0.98.0 to the integration test matrix and tested range.
+
 ## [1.2.5] - 2026-11-16
 
 ### Upgrade notes

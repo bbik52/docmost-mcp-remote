@@ -20,11 +20,14 @@ from pydantic import Field
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
 from docmost_mcp_remote.docmost.models import Invitation, InviteRole, WorkspaceRole
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
-from docmost_mcp_remote.tools.common import as_member
+from docmost_mcp_remote.tools.common import as_member, require_known_version
 from docmost_mcp_remote.tools.confirm import confirm
 from docmost_mcp_remote.tools.manage import _group, _group_ids, _person, _user_ids
-from docmost_mcp_remote.tools.read import Cursor, Limit
+from docmost_mcp_remote.tools.read import Cursor, Limit, _summary
+from docmost_mcp_remote.tools.spaces import SpacePolicy
+from docmost_mcp_remote.tools.write import find_person
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
 _ADMIN = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
@@ -66,6 +69,73 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
 
     async def one_user(backend: DocmostBackend, ref: str) -> str:
         return (await _user_ids(backend, [ref]))[0]
+
+    @mcp.tool(
+        name="get_member_profile",
+        description=(
+            "Read a workspace member profile with their recent pages and spaces visible "
+            "to you. Leave user empty for yourself; otherwise give email, exact name or id. "
+            "Pages and spaces follow ALLOWED_SPACES. Needs Docmost 0.98+."
+        ),
+        annotations=_READ_ONLY,
+        auth=require_scopes("read"),
+    )
+    async def get_member_profile(
+        user: Annotated[
+            str | None, Field(description="Email, exact name or user id; empty means you.")
+        ] = None,
+        pages_cursor: Cursor = None,
+        spaces_cursor: Cursor = None,
+        limit: Limit = 10,
+    ) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            current = await backend.current_user()
+            user_id = current.id if user is None else (await find_person(backend, user)).id
+            profile = await backend.user_profile(user_id)
+            if profile.deleted_at is not None:
+                raise ToolError("This workspace member has been removed.")
+            policy = SpacePolicy(settings.allowed_spaces)
+            allowed = await policy.allowed_ids(backend)
+            pages = await backend.user_recent_pages(user_id, cursor=pages_cursor, limit=limit)
+            spaces = await backend.user_spaces(user_id, cursor=spaces_cursor, limit=limit)
+            result: dict[str, Any] = {
+                "profile": {
+                    "id": profile.id,
+                    "name": profile.name,
+                    "email": profile.email,
+                    "role": profile.role,
+                    "avatar_url": profile.avatar_url,
+                    "deactivated": profile.deactivated_at is not None,
+                },
+                "recent_pages": {
+                    "pages": [
+                        {
+                            **_summary(page),
+                            "activity": page.activity,
+                            "activity_at": page.activity_at.isoformat()
+                            if page.activity_at
+                            else None,
+                        }
+                        for page in pages.items
+                        if allowed is None or page.space_id in allowed
+                    ],
+                    "next_cursor": pages.next_cursor if pages.has_next_page else None,
+                },
+                "spaces": {
+                    "spaces": [
+                        {"id": space.id, "name": space.name, "slug": space.slug}
+                        for space in spaces.items
+                        if policy.allows_space(space)
+                    ],
+                    "next_cursor": spaces.next_cursor if spaces.has_next_page else None,
+                },
+            }
+            if user_id == current.id:
+                result["profile"].update({"locale": current.locale, "timezone": current.timezone})
+            return result
+
+        return await as_member(members, action)
 
     @mcp.tool(
         name="list_group_members",
@@ -194,10 +264,21 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             list[str] | None,
             Field(max_length=25, description="Groups to join on sign-up: names or group ids."),
         ] = None,
+        message: Annotated[
+            str | None,
+            Field(
+                max_length=500,
+                description=(
+                    "Optional invitation email message. Docmost removes links. Needs Docmost 0.98+."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any] | mt.InputRequiredResult:
         wanted = list(dict.fromkeys(email.strip().lower() for email in emails))
 
         async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            if message is not None:
+                await require_known_version(backend, Version(0, 98, 0))
             group_ids = await _group_ids(backend, groups or [])
             already_members: list[str] = []
             already_invited: list[str] = []
@@ -218,7 +299,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 )
                 if isinstance(asked, mt.InputRequiredResult):
                     return asked
-                await backend.invite(invite, role, group_ids)
+                await backend.invite(invite, role, group_ids, message=message)
             return {
                 "invited": invite,
                 "role": role,

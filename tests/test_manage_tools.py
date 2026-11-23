@@ -132,7 +132,12 @@ def test_list_members_and_groups(server: RunningServer, mock: Recorder) -> None:
             "last_login_at": None,
         }
     ]
-    assert _last(mock, "/api/workspace/members") == {"limit": 50, "cursor": None, "query": "boris"}
+    assert _last(mock, "/api/workspace/members") == {
+        "limit": 50,
+        "cursor": None,
+        "status": "all",
+        "query": "boris",
+    }
     assert server.call(token, "list_groups")["groups"][0]["name"] == "Editors"
 
 

@@ -311,6 +311,8 @@ def test_read_grant_cannot_write(server: RunningServer) -> None:
         "duplicate_page",
         "add_comment",
         "update_comment",
+        "resolve_comment",
+        "reopen_comment",
         "replace_section",
         "add_labels",
         "remove_label",

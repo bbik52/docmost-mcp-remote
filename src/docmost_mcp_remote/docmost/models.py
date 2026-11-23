@@ -60,7 +60,18 @@ class UserRef(_Model):
     name: Name | None = None
 
 
+class UserProfile(UserRef):
+    email: str | None = None
+    role: str | None = None
+    avatar_url: str | None = Field(default=None, alias="avatarUrl")
+    deactivated_at: datetime | None = Field(default=None, alias="deactivatedAt")
+    deleted_at: datetime | None = Field(default=None, alias="deletedAt")
+
+
 class CurrentUser(_Model):
+    avatar_url: str | None = Field(default=None, alias="avatarUrl")
+    locale: str | None = None
+    timezone: str | None = None
     id: str
     name: Name | None = None
     email: str
@@ -69,12 +80,15 @@ class CurrentUser(_Model):
 
 
 class SpaceRef(_Model):
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     id: str
     name: Name | None = None
     slug: str | None = None
 
 
 class Space(_Model):
+    home_page_id: str | None = Field(default=None, alias="homePageId")
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     id: str
     name: Name | None = None
     slug: str | None = None
@@ -108,6 +122,7 @@ class WorkspaceMember(_Model):
     role: str | None = None
     last_login_at: datetime | None = Field(default=None, alias="lastLoginAt")
     deactivated_at: datetime | None = Field(default=None, alias="deactivatedAt")
+    deleted_at: datetime | None = Field(default=None, alias="deletedAt")
 
 
 class Group(_Model):
@@ -137,8 +152,16 @@ class PageSummary(_PageBase):
     deleted_at: datetime | None = Field(default=None, alias="deletedAt")
 
 
+class ProfilePage(PageSummary):
+    activity: Name | None = None
+    activity_at: datetime | None = Field(default=None, alias="activityAt")
+
+
 class Page(_PageBase):
     """A single page with its body as Markdown."""
+
+    cover_photo: str | None = Field(default=None, alias="coverPhoto")
+    cover_position: float | None = Field(default=None, alias="coverPosition")
 
     content: str = ""
     created_at: datetime | None = Field(default=None, alias="createdAt")
@@ -293,3 +316,48 @@ BacklinkDirection = Literal["incoming", "outgoing"]
 SpaceRole = Literal["admin", "writer", "reader"]
 WorkspaceRole = Literal["owner", "admin", "member"]
 InviteRole = Literal["admin", "member"]
+
+SpaceStatus = Literal["active", "archived", "all"]
+
+# Preset identifiers observed through Docmost 0.98 gallery requests.
+CoverPreset = Literal[
+    "color-red",
+    "color-orange",
+    "color-yellow",
+    "color-green",
+    "color-teal",
+    "color-blue",
+    "color-purple",
+    "color-graphite",
+    "gradient-aurora",
+    "gradient-sunset",
+    "gradient-sky",
+    "gradient-dune",
+    "gradient-forest",
+    "gradient-dusk",
+    "gradient-berry",
+    "gradient-slate",
+    "texture-split-slate",
+    "texture-northern-lights",
+    "texture-linen",
+    "texture-terrazzo",
+    "texture-graph",
+    "texture-topography",
+    "texture-blueprint",
+    "texture-waves",
+]
+
+Locale = Literal[
+    "en-US",
+    "es-ES",
+    "de-DE",
+    "fr-FR",
+    "nl-NL",
+    "pt-BR",
+    "it-IT",
+    "ja-JP",
+    "ko-KR",
+    "uk-UA",
+    "ru-RU",
+    "zh-CN",
+]
