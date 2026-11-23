@@ -69,12 +69,14 @@ class CurrentUser(_Model):
 
 
 class SpaceRef(_Model):
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     id: str
     name: Name | None = None
     slug: str | None = None
 
 
 class Space(_Model):
+    archived_at: datetime | None = Field(default=None, alias="archivedAt")
     id: str
     name: Name | None = None
     slug: str | None = None
@@ -294,3 +296,5 @@ BacklinkDirection = Literal["incoming", "outgoing"]
 SpaceRole = Literal["admin", "writer", "reader"]
 WorkspaceRole = Literal["owner", "admin", "member"]
 InviteRole = Literal["admin", "member"]
+
+SpaceStatus = Literal["active", "archived", "all"]

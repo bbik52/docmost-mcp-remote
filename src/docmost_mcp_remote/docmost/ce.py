@@ -50,6 +50,7 @@ from docmost_mcp_remote.docmost.models import (
     Space,
     SpaceMember,
     SpaceRole,
+    SpaceStatus,
     Suggestions,
     WorkspaceMember,
     WorkspaceRole,
@@ -337,8 +338,13 @@ class CeDocmostSession:
         reported = data.get("currentVersion") if isinstance(data, dict) else None
         return check_version(str(reported or ""))
 
-    async def list_spaces(self, *, cursor: str | None = None, limit: int = 50) -> Paginated[Space]:
-        data = await self._call("spaces", {"limit": _limit(limit), "cursor": cursor})
+    async def list_spaces(
+        self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
+    ) -> Paginated[Space]:
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        if status is not None:
+            body["status"] = status
+        data = await self._call("spaces", body)
         return _paginated(data, [Space.from_api(item) for item in _items(data)])
 
     async def get_space(self, space_id: str) -> Space:
@@ -569,6 +575,7 @@ class CeDocmostSession:
         title_only: bool = False,
         label_ids: list[str] | None = None,
         creator_id: str | None = None,
+        include_archived: bool = False,
     ) -> list[SearchHit]:
         body: dict[str, Any] = {"query": query, "limit": _limit(limit)}
         if space_id:
@@ -579,6 +586,8 @@ class CeDocmostSession:
             body["labelIds"] = label_ids
         if creator_id:
             body["creatorId"] = creator_id
+        if include_archived:
+            body["includeArchived"] = True
         data = await self._call("search", body)
         return [SearchHit.from_api(item) for item in _items(data)][: _limit(limit)]
 
