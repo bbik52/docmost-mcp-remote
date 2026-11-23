@@ -56,7 +56,7 @@ Python package directly supports Python 3.12 through 3.15.
   drop files in the browser, put them in order, and they land in the right
   place of the page.
 - 🐳 **Easy to host.** One container plus Postgres with a ready
-  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.97.
+  `compose.yaml`, or `pip install`. Tested in CI against Docmost 0.80.1 to 0.98.
 
 > ⭐ **If this server is useful to you, please [star the repository](https://github.com/bbik52/docmost-mcp-remote/stargazers).**
 > It helps other Docmost users find it and tells us the work is worth continuing.
@@ -577,7 +577,7 @@ Docmost Community Edition **0.80.1 or newer**. Older versions are refused at
 sign-in and on every tool call: they have published security advisories that
 the endpoints this server calls expose (CVE-2026-34212, fixed in 0.71.0, and
 CVE-2026-48073, fixed in 0.80.1). CI runs the integration tests against
-Docmost 0.80.1, 0.96.0 and 0.97.0; newer releases work in most cases and log a warning until they are
+Docmost 0.80.1, 0.96.0, 0.97.0 and 0.98.0; newer releases work in most cases and log a warning until they are
 added to the tested range. Docmost users who sign in with SSO only (an
 Enterprise feature) cannot use this server: it signs in with email and
 password. Labels and backlinks need Docmost 0.90 or newer, and the
@@ -730,7 +730,7 @@ Tests that need Postgres are skipped without `DATABASE_TEST_URL`; for example
 Integration tests run against a real Docmost:
 
 ```sh
-DOCMOST_VERSION=0.97.0 docker compose -f tests/integration/compose.yaml up -d
+DOCMOST_VERSION=0.98.0 docker compose -f tests/integration/compose.yaml up -d
 DOCMOST_TEST_URL=http://localhost:3000 uv run pytest tests/integration
 ```
 

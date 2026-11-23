@@ -114,6 +114,12 @@ async def test_search(owner: CeDocmostSession, space_id: str, unique: str) -> No
     assert [hit.id for hit in hits] == [page.id]
 
 
+async def test_workspace_member_listing_as_regular_member(member: CeDocmostSession) -> None:
+    user = await member.current_user()
+    found = await member.workspace_members(query=user.email)
+    assert [person.id for person in found.items] == [user.id]
+
+
 async def test_comments(owner: CeDocmostSession, space_id: str, unique: str) -> None:
     page = await owner.create_page(space_id, f"Commented {unique}")
     top = await owner.create_comment(page.id, "Line one\nline two\n\nSecond paragraph")
