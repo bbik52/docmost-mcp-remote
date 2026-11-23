@@ -60,7 +60,18 @@ class UserRef(_Model):
     name: Name | None = None
 
 
+class UserProfile(UserRef):
+    email: str | None = None
+    role: str | None = None
+    avatar_url: str | None = Field(default=None, alias="avatarUrl")
+    deactivated_at: datetime | None = Field(default=None, alias="deactivatedAt")
+    deleted_at: datetime | None = Field(default=None, alias="deletedAt")
+
+
 class CurrentUser(_Model):
+    avatar_url: str | None = Field(default=None, alias="avatarUrl")
+    locale: str | None = None
+    timezone: str | None = None
     id: str
     name: Name | None = None
     email: str
@@ -139,6 +150,11 @@ class PageSummary(_PageBase):
     updated_at: datetime | None = Field(default=None, alias="updatedAt")
     last_updated_by_id: str | None = Field(default=None, alias="lastUpdatedById")
     deleted_at: datetime | None = Field(default=None, alias="deletedAt")
+
+
+class ProfilePage(PageSummary):
+    activity: Name | None = None
+    activity_at: datetime | None = Field(default=None, alias="activityAt")
 
 
 class Page(_PageBase):
@@ -329,4 +345,19 @@ CoverPreset = Literal[
     "texture-topography",
     "texture-blueprint",
     "texture-waves",
+]
+
+Locale = Literal[
+    "en-US",
+    "es-ES",
+    "de-DE",
+    "fr-FR",
+    "nl-NL",
+    "pt-BR",
+    "it-IT",
+    "ja-JP",
+    "ko-KR",
+    "uk-UA",
+    "ru-RU",
+    "zh-CN",
 ]

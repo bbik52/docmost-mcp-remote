@@ -43,15 +43,18 @@ from docmost_mcp_remote.docmost.models import (
     InviteRole,
     Label,
     LinkedPage,
+    Locale,
     Page,
     PageSummary,
     Paginated,
+    ProfilePage,
     SearchHit,
     Space,
     SpaceMember,
     SpaceRole,
     SpaceStatus,
     Suggestions,
+    UserProfile,
     WorkspaceMember,
     WorkspaceRole,
 )
@@ -337,6 +340,47 @@ class CeDocmostSession:
         data = await self._call("version", {})
         reported = data.get("currentVersion") if isinstance(data, dict) else None
         return check_version(str(reported or ""))
+
+    async def user_profile(self, user_id: str) -> UserProfile:
+        return UserProfile.model_validate(await self._call("users/info", {"userId": user_id}))
+
+    async def user_recent_pages(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[ProfilePage]:
+        data = await self._call(
+            "users/recent-pages", {"userId": user_id, "cursor": cursor, "limit": _limit(limit)}
+        )
+        return _paginated(data, [ProfilePage.model_validate(item) for item in _items(data)])
+
+    async def user_spaces(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[Space]:
+        data = await self._call(
+            "users/spaces", {"userId": user_id, "cursor": cursor, "limit": _limit(limit)}
+        )
+        return _paginated(data, [Space.from_api(item) for item in _items(data)])
+
+    async def update_own_profile(
+        self,
+        *,
+        name: str | None = None,
+        locale: Locale | None = None,
+        timezone: str | None = None,
+    ) -> None:
+        body = {
+            key: value
+            for key, value in (("name", name), ("locale", locale), ("timezone", timezone))
+            if value is not None
+        }
+        await self._call("users/update", body)
 
     async def list_spaces(
         self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
