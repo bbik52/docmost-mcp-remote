@@ -20,7 +20,10 @@ pytestmark = pytest.mark.integration
 def server(migrated_database: str, tokens: dict[str, str]) -> Iterator[RunningServer]:
     # One server and one sign-in for the whole module: Docmost allows about ten
     # sign-ins per minute.
-    with RunningServer(docmost_url=DOCMOST_URL, docmost_allow_insecure_http=True) as running:
+    # This module exercises many writes; rate-limit behavior has its own tests.
+    with RunningServer(
+        docmost_url=DOCMOST_URL, docmost_allow_insecure_http=True, tool_calls_per_minute=1000
+    ) as running:
         yield running
 
 
@@ -252,10 +255,10 @@ def test_cross_space_permissions_and_trashed_children(server: RunningServer, tok
         ("move_page_to_space", "space_id"),
     ):
         for role in ("private", "reader"):
-            with pytest.raises(ToolError):
+            with pytest.raises(ToolError, match=r"(?i)(forbidden|not found|permission|access)"):
                 server.call(token, tool, {"page": parent, target_arg: targets[role]})
             assert server.call(token, "get_page", {"page": parent})["space"]["id"] == general
-        with pytest.raises(ToolError):
+        with pytest.raises(ToolError, match=r"(?i)(forbidden|not found|permission|access)"):
             server.call(token, tool, {"page": private_page, target_arg: general})
     copied = server.call(
         token, "duplicate_page", {"page": parent, "target_space_id": targets["writer"]}
