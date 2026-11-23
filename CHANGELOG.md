@@ -7,6 +7,14 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-23
+
+### Upgrade notes
+
+- No database migrations or required configuration changes. Docmost CE
+  0.80.1 remains the minimum; the new 0.98 capabilities require a verified
+  supporting version. Existing calls keep their previous defaults.
+
 ### Added
 
 - Read and set the workspace default language on Docmost 0.98 through
@@ -48,7 +56,16 @@ when upgrading lists it under "Upgrade notes".
 
 ### Changed
 
-- Add Docmost 0.98.0 to the integration test matrix and tested range.
+- Test Docmost 0.80.1, 0.97.0 and 0.98.0, plus the non-blocking `latest`
+  canary, following the oldest/previous/newest compatibility policy.
+- Update FastMCP and fastmcp-slim from 4.1.8 to 4.2.3, pydantic-settings
+  from 2.16.2 to 2.16.3 and python-multipart from 0.0.33 to 0.0.34.
+- Update pytest-asyncio to 1.5.0, Ruff to 0.17.6 and setup-uv to 10.4.0.
+
+### Acknowledgements
+
+- Thanks to [osh-labs](https://github.com/osh-labs) for the Docmost 0.98
+  workspace-member compatibility contribution.
 
 ## [1.2.5] - 2026-11-16
 
