@@ -537,6 +537,11 @@ Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
 Results expose `archived`; a search scoped to one space includes that
 space even when archived. `ALLOWED_SPACES` still applies to archived data.
 
+Smart dates from Docmost 0.98 are preserved by JSON writes and Markdown
+append/prepend operations. Markdown replacement warns that it would lose
+smart dates; use JSON to keep them. Writing dates requires a verified 0.98+
+backend version.
+
 ## 🛡️ Safety nets
 
 - **Snapshots.** Before every body change the server saves the current body

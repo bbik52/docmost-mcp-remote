@@ -39,6 +39,10 @@ when upgrading lists it under "Upgrade notes".
 
 ### Fixed
 
+- Preserve Docmost 0.98 smart dates in ProseMirror JSON writes, append/prepend
+  edits and snapshots. Report their Markdown loss and reject writes to older
+  or unidentified versions before mutation.
+
 - Find deactivated workspace members on Docmost 0.98 so they can be
   activated again; omit removed members from lookups.
 

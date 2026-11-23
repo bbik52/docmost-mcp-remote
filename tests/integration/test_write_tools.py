@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Iterator
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from docmost_mcp_remote.docmost.version import Version
 from tests.harness import RunningServer
-from tests.integration.conftest import DOCMOST_URL, MEMBER, reported_version
+from tests.integration.conftest import DOCMOST_URL, MEMBER, OWNER, reported_version
 
 pytestmark = pytest.mark.integration
 
@@ -209,3 +211,64 @@ def test_section_edit(server: RunningServer, token: str) -> None:
     assert "second" not in content
     assert "| Name" in content
     assert "Bye." in content
+
+
+def test_cross_space_permissions_and_trashed_children(server: RunningServer, token: str) -> None:
+    if os.environ.get("DOCMOST_VERSION") not in {"0.98.0", "latest"}:
+        pytest.skip("Regression coverage for Docmost 0.98 move/copy changes")
+    owner = server.token(scopes=("admin", "write", "delete"), email=OWNER[0], password=OWNER[1])
+    unique = uuid.uuid4().hex[:8]
+    general = next(
+        s["id"] for s in server.call(token, "list_spaces")["spaces"] if s["slug"] == "general"
+    )
+    targets = {}
+    for role in ("private", "reader", "writer"):
+        space = server.call(
+            owner, "create_space", {"name": f"Move {role}", "slug": f"m{role}{unique}"}
+        )
+        targets[role] = space["id"]
+        if role != "private":
+            server.call(
+                owner,
+                "add_space_members",
+                {"space_id": space["id"], "role": role, "users": [MEMBER[0]]},
+            )
+    parent = server.call(token, "create_page", {"space_id": general, "title": f"Tree {unique}"})[
+        "id"
+    ]
+    children = {}
+    for state in ("active", "trashed"):
+        children[state] = server.call(
+            token,
+            "create_page",
+            {"space_id": general, "title": f"{state} {unique}", "parent_page_id": parent},
+        )["id"]
+    server.call(token, "trash_page", {"page": children["trashed"]})
+    private_page = server.call(
+        owner, "create_page", {"space_id": targets["private"], "title": "Private source"}
+    )["id"]
+    for tool, target_arg in (
+        ("duplicate_page", "target_space_id"),
+        ("move_page_to_space", "space_id"),
+    ):
+        for role in ("private", "reader"):
+            with pytest.raises(ToolError):
+                server.call(token, tool, {"page": parent, target_arg: targets[role]})
+            assert server.call(token, "get_page", {"page": parent})["space"]["id"] == general
+        with pytest.raises(ToolError):
+            server.call(token, tool, {"page": private_page, target_arg: general})
+    copied = server.call(
+        token, "duplicate_page", {"page": parent, "target_space_id": targets["writer"]}
+    )
+    assert copied["space_id"] == targets["writer"]
+    assert copied["copied_child_pages"] == 1
+    copied_children = server.call(
+        token, "list_pages", {"space_id": targets["writer"], "parent_page_id": copied["id"]}
+    )["pages"]
+    assert [c["title"] for c in copied_children] == [f"active {unique}"]
+    server.call(token, "move_page_to_space", {"page": parent, "space_id": targets["writer"]})
+    for child in children.values():
+        found = server.call(token, "get_page", {"page": child})
+        assert found["space"]["id"] == targets["writer"]
+        assert found["parent_page_id"] == parent
+    assert server.call(token, "get_page", {"page": children["trashed"]})["in_trash"] is True
