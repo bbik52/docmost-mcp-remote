@@ -9,6 +9,10 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- Read and set the workspace default language on Docmost 0.98 through
+  admin-scoped tools, without changing existing members' preferences or
+  unrelated workspace settings.
+
 - Add an optional personal message (up to 500 characters) to invitation
   emails on Docmost 0.98; calls without a message remain compatible.
 
