@@ -19,7 +19,7 @@ from pydantic import Field
 
 from docmost_mcp_remote.config import Settings
 from docmost_mcp_remote.docmost import DocmostBackend
-from docmost_mcp_remote.docmost.models import Group, Space, SpaceRole, WorkspaceMember
+from docmost_mcp_remote.docmost.models import Group, Locale, Space, SpaceRole, WorkspaceMember
 from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.tools.common import as_member, require_known_version
@@ -336,6 +336,47 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 if space.home_page_id != page_id:
                     raise ToolError("Docmost did not confirm the requested home page.")
             return {**_space(space, docmost_base), "changed": changed}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="get_workspace_language",
+        description=("Read the default workspace language only. Needs Docmost 0.98+."),
+        annotations=_READ_ONLY,
+        auth=require_scopes("admin"),
+    )
+    async def get_workspace_language() -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            return {"default_locale": await backend.workspace_default_locale()}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="set_workspace_language",
+        description=(
+            "Change the default workspace language for new members; existing members "
+            "keep their language. Needs Docmost 0.98+ and workspace admin or owner rights."
+        ),
+        annotations=_ADMIN,
+        auth=require_scopes("admin"),
+    )
+    async def set_workspace_language(
+        locale: Annotated[Locale, Field(description="The default language for new members.")],
+    ) -> dict[str, Any] | mt.InputRequiredResult:
+        async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            await require_known_version(backend, Version(0, 98, 0))
+            previous = await backend.workspace_default_locale()
+            if previous == locale:
+                return {"default_locale": previous, "changed": False}
+            asked = await confirm(f"Set the Docmost workspace default language to {locale}?")
+            if isinstance(asked, mt.InputRequiredResult):
+                return asked
+            await backend.set_workspace_default_locale(locale)
+            saved = await backend.workspace_default_locale()
+            if saved != locale:
+                raise ToolError("Docmost did not confirm the requested workspace language.")
+            return {"default_locale": saved, "previous_locale": previous, "changed": True}
 
         return await as_member(members, action)
 

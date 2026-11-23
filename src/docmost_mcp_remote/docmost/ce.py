@@ -382,6 +382,17 @@ class CeDocmostSession:
         }
         await self._call("users/update", body)
 
+    async def workspace_default_locale(self) -> str:
+        data = await self._call("users/me", {})
+        workspace = data.get("workspace")
+        if not isinstance(workspace, dict):
+            raise DocmostError("Docmost did not return workspace settings")
+        settings = workspace.get("settings") or {}
+        return str(settings.get("defaultLocale") or "en-US")
+
+    async def set_workspace_default_locale(self, locale: Locale) -> None:
+        await self._call("workspace/update", {"defaultLocale": locale})
+
     async def list_spaces(
         self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
     ) -> Paginated[Space]:
