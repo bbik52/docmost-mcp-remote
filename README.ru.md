@@ -496,7 +496,13 @@ claude mcp add --transport http docmost https://mcp.example.com/mcp
 
 <a id="safety-nets"></a>
 
-### 🛡️ Страховка
+#
+Архивные пространства (Docmost 0.98+): используйте `list_spaces(status="archived")`
+или `status="all"` и `search(include_archived=true)` для глобального поиска.
+Результаты содержат признак `archived`. Поиск в конкретном пространстве
+включает его и после архивации. Ограничение `ALLOWED_SPACES` сохраняется.
+
+## 🛡️ Страховка
 
 - **Снимки.** Перед каждым изменением тела страницы сервер сохраняет текущее
   тело как зашифрованный снимок в своей базе на `SNAPSHOT_RETENTION_DAYS`

@@ -33,6 +33,7 @@ from docmost_mcp_remote.docmost.models import (
     Space,
     SpaceMember,
     SpaceRole,
+    SpaceStatus,
     Suggestions,
     WorkspaceMember,
     WorkspaceRole,
@@ -46,7 +47,7 @@ class DocmostBackend(Protocol):
     async def version(self) -> VersionCheck: ...
 
     async def list_spaces(
-        self, *, cursor: str | None = None, limit: int = 50
+        self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
     ) -> Paginated[Space]: ...
 
     async def get_space(self, space_id: str) -> Space: ...
@@ -91,6 +92,7 @@ class DocmostBackend(Protocol):
         title_only: bool = False,
         label_ids: list[str] | None = None,
         creator_id: str | None = None,
+        include_archived: bool = False,
     ) -> list[SearchHit]: ...
 
     async def backlinks(

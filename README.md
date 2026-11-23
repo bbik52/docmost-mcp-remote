@@ -498,7 +498,13 @@ profile: people join through an invitation and set their own password.
 
 <a id="safety-nets"></a>
 
-### 🛡️ Safety nets
+#
+Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
+`status="all"`, and `search(include_archived=true)` for global search.
+Results expose `archived`; a search scoped to one space includes that
+space even when archived. `ALLOWED_SPACES` still applies to archived data.
+
+## 🛡️ Safety nets
 
 - **Snapshots.** Before every body change the server saves the current body
   as a snapshot in its own database, encrypted, for

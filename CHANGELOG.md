@@ -7,6 +7,12 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Added
+
+- List and search archived spaces on Docmost 0.98, returning an archive
+  indicator. Space allowlists include permitted archived spaces. Explicit
+  archive filters require a verified supporting version.
+
 ### Fixed
 
 - Find deactivated workspace members on Docmost 0.98 so they can be

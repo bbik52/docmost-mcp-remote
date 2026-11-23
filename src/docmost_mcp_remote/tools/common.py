@@ -74,6 +74,16 @@ async def require_version(backend: DocmostBackend, minimum: Version) -> None:
         )
 
 
+async def require_known_version(backend: DocmostBackend, minimum: Version) -> None:
+    """Reject an unsupported or unknown version before using optional API fields."""
+    version = await docmost_version(backend)
+    if version is None:
+        raise ToolError(
+            f"This needs Docmost {minimum} or newer, but its version could not be verified."
+        )
+    await require_version(backend, minimum)
+
+
 def formatting_hint(losses: list[str]) -> str | None:
     """Advice for a page whose formatting Markdown cannot hold; None when it can."""
     if not losses:
