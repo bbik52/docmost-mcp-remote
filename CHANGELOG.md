@@ -9,6 +9,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- Set or clear a space home page on Docmost 0.98; require a non-trashed
+  page in that space and verify the saved home page.
+
 - Archive and unarchive spaces on Docmost 0.98 with admin scope,
   confirmation, allowlist checks and readback verification.
 

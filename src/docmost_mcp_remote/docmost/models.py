@@ -76,6 +76,7 @@ class SpaceRef(_Model):
 
 
 class Space(_Model):
+    home_page_id: str | None = Field(default=None, alias="homePageId")
     archived_at: datetime | None = Field(default=None, alias="archivedAt")
     id: str
     name: Name | None = None

@@ -355,6 +355,9 @@ class CeDocmostSession:
         path = "spaces/archive" if archived else "spaces/unarchive"
         await self._call(path, {"spaceId": space_id})
 
+    async def set_space_homepage(self, space_id: str, page_id: str | None) -> None:
+        await self._call("spaces/update", {"spaceId": space_id, "homePageId": page_id})
+
     async def create_space(self, name: str, slug: str, *, description: str | None = None) -> Space:
         body: dict[str, Any] = {"name": name, "slug": slug}
         if description is not None:
