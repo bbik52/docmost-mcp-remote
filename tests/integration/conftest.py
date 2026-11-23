@@ -33,6 +33,8 @@ def reported_version(server: RunningServer, token: str) -> Version | None:
     without a version when that request fails, as it can on shared CI runners.
     """
     reported = server.call(token, "whoami")["docmost_version"]
+    # The pinned image is authoritative when Docmost's GitHub lookup fails.
+    reported = reported or os.environ.get("DOCMOST_VERSION", "")
     try:
         return parse_version(reported) if reported else None
     except ValueError:

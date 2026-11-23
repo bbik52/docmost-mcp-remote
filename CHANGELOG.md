@@ -9,6 +9,10 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- Read, set and remove page covers on Docmost 0.98 using built-in presets
+  or authorized image attachments (up to 10 MB). Cover changes preserve
+  the page body and verify the saved metadata.
+
 - Set or clear a space home page on Docmost 0.98; require a non-trashed
   page in that space and verify the saved home page.
 
