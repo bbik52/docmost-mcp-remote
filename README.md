@@ -49,7 +49,7 @@ Python package directly supports Python 3.12 through 3.15.
   `delete` and `admin` are opt-in per client. Nothing is deleted permanently,
   risky changes ask you first, and an encrypted snapshot of a page is saved
   before every change.
-- 🧰 **62 tools.** Read, search, write by section, comment with @-mentions,
+- 🧰 **64 tools.** Read, search, write by section, comment with @-mentions,
   move, label, export, restore old versions, check a space's health and run
   the workspace: spaces, groups, invitations and roles.
 - 📎 **Files without burning tokens.** The assistant gives you an upload link:
@@ -367,7 +367,7 @@ seven common clients, exact addresses, a multi-client example and setup steps.
 
 ## 🧰 Tools
 
-62 tools in groups. The scope is what a client needs to be granted to see the
+64 tools in groups. The scope is what a client needs to be granted to see the
 tool: `read` is always granted, the others are opt-in.
 
 **Account and spaces**
@@ -491,6 +491,8 @@ tool: `read` is always granted, the others are opt-in.
 | 60 | `change_workspace_role` | admin | Make someone a member, admin or owner of the workspace |
 | 61 | `deactivate_member` | admin | Stop someone from signing in, keeping their account |
 | 62 | `activate_member` | admin | Let a deactivated member sign in again |
+| 63 | `resolve_comment` | write | Close a discussion (Docmost CE 0.98+) |
+| 64 | `reopen_comment` | write | Reopen a discussion (Docmost CE 0.98+) |
 
 People cannot be removed from the workspace or from groups, and groups cannot
 be deleted. Docmost has no way to create an account or edit someone else's
@@ -499,6 +501,10 @@ profile: people join through an invitation and set their own password.
 <a id="safety-nets"></a>
 
 #
+`resolve_comment(comment_id)` closes a discussion and `reopen_comment(comment_id)`
+opens it again. Both need `write`, a top-level comment id and Docmost CE 0.98+.
+Docmost permissions and `ALLOWED_SPACES` apply.
+
 Archived spaces (Docmost 0.98+): use `list_spaces(status="archived")` or
 `status="all"`, and `search(include_archived=true)` for global search.
 Results expose `archived`; a search scoped to one space includes that

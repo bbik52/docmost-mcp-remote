@@ -29,6 +29,7 @@ from docmost_mcp_remote.docmost.documents import check_document, markdown_losses
 from docmost_mcp_remote.docmost.models import BodyOperation, Page, PageSummary, WorkspaceMember
 from docmost_mcp_remote.docmost.positions import PositionError, position_between
 from docmost_mcp_remote.docmost.prosemirror import doc_to_markdown, mention_node
+from docmost_mcp_remote.docmost.version import Version
 from docmost_mcp_remote.members import MemberService
 from docmost_mcp_remote.sections import (
     apply_operation,
@@ -37,7 +38,12 @@ from docmost_mcp_remote.sections import (
     replace_section,
     unified_diff,
 )
-from docmost_mcp_remote.tools.common import as_member, formatting_hint, page_link
+from docmost_mcp_remote.tools.common import (
+    as_member,
+    formatting_hint,
+    page_link,
+    require_known_version,
+)
 from docmost_mcp_remote.tools.confirm import confirm, named
 from docmost_mcp_remote.tools.read import Cursor, Limit, page_ref
 from docmost_mcp_remote.tools.spaces import SpacePolicy
@@ -771,6 +777,43 @@ def register(
             }
 
         return await as_member(members, action)
+
+    async def change_comment_resolution(comment_id: str, resolved: bool) -> dict[str, Any]:
+        async def action(backend: DocmostBackend) -> dict[str, Any]:
+            await require_known_version(backend, Version(0, 98, 0))
+            comment = await backend.get_comment(comment_id)
+            if comment.parent_comment_id:
+                raise ToolError("Use the top-level comment id to resolve or reopen a discussion.")
+            space_id = comment.space_id or (await backend.get_page(comment.page_id)).space_id
+            await policy.check(backend, space_id)
+            updated = await backend.set_comment_resolved(comment.id, resolved)
+            if (updated.resolved_at is not None) != resolved:
+                raise ToolError("Docmost did not confirm the requested discussion status.")
+            return {"id": updated.id, "page_id": updated.page_id, "resolved": resolved}
+
+        return await as_member(members, action)
+
+    @mcp.tool(
+        name="resolve_comment",
+        description="Close a discussion using its top-level comment id. Needs Docmost CE 0.98+.",
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def resolve_comment(
+        comment_id: Annotated[str, Field(description="Top-level comment id from list_comments.")],
+    ) -> dict[str, Any]:
+        return await change_comment_resolution(comment_id, True)
+
+    @mcp.tool(
+        name="reopen_comment",
+        description="Reopen a resolved discussion using its top-level comment id. Needs CE 0.98+.",
+        annotations=_WRITE,
+        auth=require_scopes("write"),
+    )
+    async def reopen_comment(
+        comment_id: Annotated[str, Field(description="Top-level comment id from list_comments.")],
+    ) -> dict[str, Any]:
+        return await change_comment_resolution(comment_id, False)
 
     @mcp.tool(
         name="list_trash",

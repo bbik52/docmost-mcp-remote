@@ -709,6 +709,10 @@ class CeDocmostSession:
         data = await self._call("comments/create", body)
         return Comment.from_api(data)
 
+    async def set_comment_resolved(self, comment_id: str, resolved: bool) -> Comment:
+        data = await self._call("comments/resolve", {"commentId": comment_id, "resolved": resolved})
+        return Comment.from_api(data)
+
     async def update_comment(self, comment_id: str, text: str) -> Comment:
         data = await self._call(
             "comments/update",
