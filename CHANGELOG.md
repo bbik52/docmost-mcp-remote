@@ -7,6 +7,15 @@ when upgrading lists it under "Upgrade notes".
 
 ## [Unreleased]
 
+### Fixed
+
+- Find deactivated workspace members on Docmost 0.98 so they can be
+  activated again; omit removed members from lookups.
+
+### Changed
+
+- Add Docmost 0.98.0 to the integration test matrix and tested range.
+
 ## [1.2.5] - 2026-11-16
 
 ### Upgrade notes

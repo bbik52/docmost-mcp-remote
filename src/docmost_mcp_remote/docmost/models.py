@@ -108,6 +108,7 @@ class WorkspaceMember(_Model):
     role: str | None = None
     last_login_at: datetime | None = Field(default=None, alias="lastLoginAt")
     deactivated_at: datetime | None = Field(default=None, alias="deactivatedAt")
+    deleted_at: datetime | None = Field(default=None, alias="deletedAt")
 
 
 class Group(_Model):

@@ -401,11 +401,16 @@ class CeDocmostSession:
     async def workspace_members(
         self, *, query: str | None = None, cursor: str | None = None, limit: int = 50
     ) -> Paginated[WorkspaceMember]:
-        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor}
+        # Docmost 0.98 lists active members only unless asked for "all"; older releases
+        # list active and deactivated members and ignore the unknown field. Either way the
+        # caller gets both, so deactivated people can be found and activated again.
+        body: dict[str, Any] = {"limit": _limit(limit), "cursor": cursor, "status": "all"}
         if query:
             body["query"] = query
         data = await self._call("workspace/members", body)
-        return _paginated(data, [WorkspaceMember.model_validate(item) for item in _items(data)])
+        members = [WorkspaceMember.model_validate(item) for item in _items(data)]
+        # "all" in 0.98 also returns removed people; no release listed them before.
+        return _paginated(data, [member for member in members if member.deleted_at is None])
 
     async def suggest(
         self,
