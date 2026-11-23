@@ -47,6 +47,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Fixed
 
+- Run pinned-image version regression tests in unit CI even without a live
+  Docmost instance.
+
 - Preserve Docmost 0.98 smart dates in ProseMirror JSON writes, append/prepend
   edits and snapshots. Report their Markdown loss and reject writes to older
   or unidentified versions before mutation.
