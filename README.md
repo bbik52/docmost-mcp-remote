@@ -49,7 +49,7 @@ Python package directly supports Python 3.12 through 3.15.
   `delete` and `admin` are opt-in per client. Nothing is deleted permanently,
   risky changes ask you first, and an encrypted snapshot of a page is saved
   before every change.
-- 🧰 **66 tools.** Read, search, write by section, comment with @-mentions,
+- 🧰 **67 tools.** Read, search, write by section, comment with @-mentions,
   move, label, export, restore old versions, check a space's health and run
   the workspace: spaces, groups, invitations and roles.
 - 📎 **Files without burning tokens.** The assistant gives you an upload link:
@@ -367,7 +367,7 @@ seven common clients, exact addresses, a multi-client example and setup steps.
 
 ## 🧰 Tools
 
-66 tools in groups. The scope is what a client needs to be granted to see the
+67 tools in groups. The scope is what a client needs to be granted to see the
 tool: `read` is always granted, the others are opt-in.
 
 **Account and spaces**
@@ -495,6 +495,7 @@ tool: `read` is always granted, the others are opt-in.
 | 64 | `reopen_comment` | write | Reopen a discussion (Docmost CE 0.98+) |
 | 65 | `archive_space` | admin | Archive a space (Docmost 0.98+) |
 | 66 | `unarchive_space` | admin | Unarchive a space (Docmost 0.98+) |
+| 67 | `set_space_homepage` | admin | Set a space home page, or reset with `page: null` (Docmost 0.98+) |
 
 People cannot be removed from the workspace or from groups, and groups cannot
 be deleted. Docmost has no way to create an account or edit someone else's

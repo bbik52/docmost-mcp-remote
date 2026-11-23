@@ -145,6 +145,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 "description": space.description or None,
                 "visibility": space.visibility,
                 "member_count": space.member_count,
+                "home_page_id": space.home_page_id,
                 "your_role": space.member_role,
                 "archived": space.archived_at is not None,
                 "created_at": space.created_at.isoformat() if space.created_at else None,
