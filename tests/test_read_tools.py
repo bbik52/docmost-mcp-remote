@@ -126,6 +126,7 @@ def test_tool_list(server: RunningServer) -> None:
         "export_space",
         "find_pages_by_label",
         "get_attachment",
+        "get_member_profile",
         "get_page",
         "get_page_outline",
         "get_page_tree",

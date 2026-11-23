@@ -26,15 +26,18 @@ from docmost_mcp_remote.docmost.models import (
     InviteRole,
     Label,
     LinkedPage,
+    Locale,
     Page,
     PageSummary,
     Paginated,
+    ProfilePage,
     SearchHit,
     Space,
     SpaceMember,
     SpaceRole,
     SpaceStatus,
     Suggestions,
+    UserProfile,
     WorkspaceMember,
     WorkspaceRole,
 )
@@ -45,6 +48,32 @@ class DocmostBackend(Protocol):
     async def current_user(self) -> CurrentUser: ...
 
     async def version(self) -> VersionCheck: ...
+
+    async def user_profile(self, user_id: str) -> UserProfile: ...
+
+    async def user_recent_pages(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[ProfilePage]: ...
+
+    async def user_spaces(
+        self,
+        user_id: str,
+        *,
+        cursor: str | None = None,
+        limit: int = 10,
+    ) -> Paginated[Space]: ...
+
+    async def update_own_profile(
+        self,
+        *,
+        name: str | None = None,
+        locale: Locale | None = None,
+        timezone: str | None = None,
+    ) -> None: ...
 
     async def list_spaces(
         self, *, cursor: str | None = None, limit: int = 50, status: SpaceStatus | None = None
