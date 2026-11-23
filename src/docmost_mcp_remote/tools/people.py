@@ -264,10 +264,21 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
             list[str] | None,
             Field(max_length=25, description="Groups to join on sign-up: names or group ids."),
         ] = None,
+        message: Annotated[
+            str | None,
+            Field(
+                max_length=500,
+                description=(
+                    "Optional invitation email message. Docmost removes links. Needs Docmost 0.98+."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any] | mt.InputRequiredResult:
         wanted = list(dict.fromkeys(email.strip().lower() for email in emails))
 
         async def action(backend: DocmostBackend) -> dict[str, Any] | mt.InputRequiredResult:
+            if message is not None:
+                await require_known_version(backend, Version(0, 98, 0))
             group_ids = await _group_ids(backend, groups or [])
             already_members: list[str] = []
             already_invited: list[str] = []
@@ -288,7 +299,7 @@ def register(mcp: FastMCP, settings: Settings, members: MemberService) -> None:
                 )
                 if isinstance(asked, mt.InputRequiredResult):
                     return asked
-                await backend.invite(invite, role, group_ids)
+                await backend.invite(invite, role, group_ids, message=message)
             return {
                 "invited": invite,
                 "role": role,

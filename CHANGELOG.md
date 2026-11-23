@@ -9,6 +9,9 @@ when upgrading lists it under "Upgrade notes".
 
 ### Added
 
+- Add an optional personal message (up to 500 characters) to invitation
+  emails on Docmost 0.98; calls without a message remain compatible.
+
 - Read member profiles with paginated recent pages and spaces filtered by
   the space allowlist. Update only your own display name, language and time
   zone through a write-scoped tool with readback verification.
